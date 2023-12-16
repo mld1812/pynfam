@@ -1,0 +1,34 @@
+&HFBTHO_GENERAL
+ number_of_shells = 6, oscillator_length = -1.0, basis_deformation = 0.0,
+ proton_number = 24, neutron_number = 36, type_of_calculation = 1 /
+&HFBTHO_INITIAL
+ beta2_deformation = 0.0, beta3_deformation = 0.0, beta4_deformation = 0.0 /
+&HFBTHO_ITERATIONS
+ number_iterations = 400, accuracy = 1.E-7, restart_file = 3 /
+&HFBTHO_FUNCTIONAL
+ functional = 'SLY4', add_initial_pairing = F, type_of_coulomb = 2 /
+&HFBTHO_PAIRING
+ user_pairing = T, vpair_n = -280.0, vpair_p = -320.0,
+ pairing_cutoff = 60.0, pairing_feature = 0.5 /
+&HFBTHO_CONSTRAINTS
+ lambda_values = 1, 2, 3, 4, 5, 6, 7, 8,
+ lambda_active = 0,-1, 0, 0, 0, 0, 0, 0,
+ expectation_values = 0.0, -3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 /
+&HFBTHO_BLOCKING
+ proton_blocking = 0, 0, 0, 0, 0, neutron_blocking = 0, 0, 0, 0, 0 /
+&HFBTHO_PROJECTION
+ switch_to_THO = 0, projection_is_on = 0,
+ gauge_points = 1, delta_Z = 0, delta_N = 0 /
+&HFBTHO_TEMPERATURE
+ set_temperature = F, temperature = 0.0 /
+&HFBTHO_FEATURES
+ collective_inertia = F, fission_fragments = F, pairing_regularization = F,
+ automatic_basis = F, localization_functions = F /
+&HFBTHO_TDDFT
+ filter = F, fragment_properties = F, real_Z = 49.7, real_N = 71.2  /
+&HFBTHO_NECK
+ set_neck_constrain = F, neck_value = 13.00  /
+&HFBTHO_DEBUG
+ number_Gauss = 30, number_Laguerre = 30, number_Legendre = 60,
+ compatibility_HFODD = F, number_states = 500, force_parity = T,
+ print_time = 0 /

@@ -1,0 +1,88 @@
+Compile Directions (see details below)
+1. Choose HFBTHO_ARCH
+
+2. Set environment variables HFBTHO_DIR and HFBTHO_ARCH
+
+3. Create $HFBTHO_DIR/$HFBTHO_ARCH/MakeIncl
+
+4. cd $HFBTHO_DIR/src
+
+5. make
+This will compile hfbtho src and create binary $HFBTHO_DIR/$HFBTHO_ARCH/bin/hfbtho_main
+
+6. cd anl
+
+7. make
+This will compile anl src and create binary $HFBTHO_DIR/$HFBTHO_ARCH/bin/anl_compute
+
+
+Running Direction
+1. cd $HFBTHO_DIR/UNEDF
+
+2. If desired, edit UNEDF1_chi2.dat file to select which nuclei to compute (everything starting with '#' and a line with 'END' will stop at that point). If not
+changed, all residuals will be computed
+
+3. write x.in file with parameters (copy from x.in.unedf1 to use UNEDF1)
+
+4. ../$HFBTHO_ARCH/bin/anl_compute
+
+5. scaled residuals will be written to fval.out
+
+6. for mpi, set anl_globals%verbose=0 and run
+    mpiexec -np 8 $HFBTHO_DIR/$HFBTHO_ARCH/bin/anl_compute
+
+
+
+What I (Jason) still need to do:
+ * Explain parameters in x.in
+ * Add information to run from sly4
+ * Add in matlab files and scripts for optimization run
+
+
+Changes I made to hfbtho src:
+  allow negative n00_INI values
+  added option to avoid writing hel file
+
+
+
+
+
+COMPILING DETAILS
+1. Choose HFBTHO_ARCH
+HFBTHO_ARCH is your choice, it is used as key for having several binaries 
+available in the same source tree, for example if you want a binary 
+compiled with intel, using mkl for blas/lapack, and openmp, you may want 
+to use HFBTHO_ARCH=intel-mkl-openmp
+
+
+2. Set environment variables
+export HFBTHO_DIR=/path/to/hfbthosvn
+export HFBTHO_ARCH=(whatever was chosen in #1)
+
+3. Create $HFBTHO_DIR/$HFBTHO_ARCH/MakeIncl
+The makefile now will look in $HFBTHO_DIR/$HFBTHO_ARCH/MakeIncl for 
+installation-specific variables:
+LINEAR_ALGEBRA (=linker flags to use blas/lapack)
+COMPILER (=GFORTRAN,PGI,IFORT,PATHSCALE,LAHEY,CRAY)
+DEBUG (=TRUE or FALSE)
+USE_OPENMP (=0 or 1)
+USE_MPI (=0 or 1)
+FORTRAN_MPI (=the actual fortran compile command, probably mpif90)
+FFLAGS (=any additional fortran compiler flags)
+
+Example:
+LINEAR_ALGEBRA=-Wl,-rpath,/soft/com/packages/intel/13/update4/mkl/lib/intel64 -L/soft/com/packages/intel/13/update4/mkl/lib/intel64  -lmkl_intel_lp64 -lmkl_core -lmkl_intel_thread -liomp5 -lpthread
+COMPILER=IFORT
+DEBUG=FALSE
+USE_OPENMP=1
+USE_MPI=0
+FORTRAN_MPI=ifort
+
+7. There are several variables in anl_compute.f90 that can be set, such as 
+   * data filenames
+   * whether hel files are read or written
+   * if full output is desired
+   * number of iterations 
+   * precision (epsi)
+   
+

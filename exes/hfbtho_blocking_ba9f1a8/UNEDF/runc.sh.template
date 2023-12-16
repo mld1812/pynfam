@@ -1,0 +1,6 @@
+#!/bin/sh
+
+
+time mpiexec -machinefile op8_hostfile -np 120 -env OMP_NUM_THREADS 8 -env MV2_ENABLE_AFFINITY 0 ../blues/bin/anl_unedf1 >> computelog
+
+

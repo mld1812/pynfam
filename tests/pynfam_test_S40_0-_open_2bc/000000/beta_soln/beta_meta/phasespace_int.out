@@ -1,0 +1,19 @@
+# Nuclear Beta Decay Integrated Phase Space
+# PynFAM code version: 2.0.0
+# Run Date: 2023-12-16 12:32
+# Summary Data:
+#   FAM_ctr     = CONSTL on (1.00e+01, 2.25e+01)      , temper      = 0.00000   
+#   beta_type   = -         , quadratr    = TRAP      , Half_Width  = 0.50000   , screening   = N/A       
+#   psi_approx  = N/A       , psi_glpts   = 15        
+#   Zi          = 16        , A           = 40        , Zf          = 17        , HFB_Qval    = 7.70087   
+#   FAM_Qval    = 0.47604   , EQRPAmax    = 10.47604  , E_1stPeak   = 10.00000  , |gA|/gV     = 1.27000   
+#   gA          = -1.27000  , gV          = 1.00000   , M_nucleon   = 939.00000 , alpha*Z     = 0.12405   
+#   Radius      = 0.01063   , alpha*Z/2R  = 5.83646   , W0_max      = 16.07022  , W0*R        = 0.18096   
+#
+                    Re[Int_f]                 Im[Int_f]
+f1     6.3536879552912248e-02    0.0000000000000000e+00
+f2     8.1486682306448247e-02    0.0000000000000000e+00
+f3     1.0608437690431914e-01    0.0000000000000000e+00
+f4     1.4136599067061983e-01    0.0000000000000000e+00
+f5     3.3277276042987795e-02    0.0000000000000000e+00
+f6     5.9384970337767906e-02    0.0000000000000000e+00

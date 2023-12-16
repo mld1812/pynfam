@@ -1,0 +1,23 @@
+# Setting environment variables
+export OMP_NUM_THREADS=
+export OMP_STACKSIZE=64M
+ulimit -c unlimited
+ulimit -s unlimited
+
+# Customization of names and places
+EXECUTABLE=
+SCRATCH_DIR=
+OUTPUT='output.txt'
+
+#Running the job
+if [ ! -d "$SCRATCH_DIR" ]; then
+    echo "Creating directory" $SCRATCH_DIR
+    mkdir $SCRATCH_DIR
+fi
+cp $EXECUTABLE $SCRATCH_DIR
+cd $SCRATCH_DIR
+
+date 
+srun
+date
+

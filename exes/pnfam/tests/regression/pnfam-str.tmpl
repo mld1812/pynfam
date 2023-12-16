@@ -1,0 +1,12 @@
+&GENERAL
+  fam_mode = "STR", hfb_input_filename = "solution.hfb", 
+  fam_output_filename = "test.out", log_filename = "" /
+&EXT_FIELD
+   operator_name = "{label:s}", K = {k:d}, compute_crossterms = T /
+&INTERACTION
+   interaction_name = "SLY4", require_gauge_invariance = T,
+   require_self_consistency = T, vpair_t0 = -600.0 /
+&STR_PARAMETERS
+   energy_start = 5.0, energy_step = 0.2, nr_points = 1, half_width = 0.5 /
+&SOLVER
+   max_iter = 100, broyden_history_size = 50, convergence_epsilon = 1d-7 /

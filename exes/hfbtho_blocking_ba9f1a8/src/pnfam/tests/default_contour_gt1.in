@@ -1,0 +1,41 @@
+&GENERAL
+   fam_mode = "CONTOUR",
+   hfb_input_filename = "hfb.solution",
+   fam_output_filename = "out_gt1.dat",
+   log_filename = "pnfam_test_gt1.log"
+/
+&EXT_FIELD
+   operator_name = "GT-",
+   K = 1,
+   compute_crossterms = F
+/
+&INTERACTION
+   interaction_name = "SLY4",
+   force_j2_terms = F,
+   require_gauge_invariance = F,
+   require_self_consistency = T,
+   vpair_t0 = ,
+   vpair_t1 = ,
+   override_cs0 = ,
+   override_csr = ,
+   override_cds = ,
+   override_ct = ,
+   override_cgs = ,
+   override_cf =
+/
+&CONTOUR_PARAMETERS   ! only read and used if mode='CONTOUR'
+   q_value = 2.0,
+   nr_points = 7,
+   rot_correction = 0.0,
+   include_endpoint = F
+   rotate_contour   = F
+   contour_anchor = -1.0,
+   poly_order = 6,
+   poly_fit_si = 1d-5,
+   poly_fit_points = 200
+/
+&SOLVER
+   max_iter = 100,
+   broyden_history_size = 50,
+   convergence_epsilon = 1d-7
+/

@@ -1,0 +1,84 @@
+------------------------
+| OPTIMIZATION PACKAGE |
+------------------------
+
+A. COMPILING
+   =========
+
+   1. HFBTHO ONLY
+      -----------
+
+* Choose a name for HFBTHO_ARCH and export is as environment variable. The executable generated at compilation will be placed there.
+* Set HFBTHO_DIR to the where you have the sources for the HFBTHO solver. When installing this package, it comes in ./hfbthosvn/src/hfbtho
+
+Example: My local installation on LC
+export HFBTHO_DIR=/g/g91/schunck1/Development/sandbox/HFBTHO/source/hfbthosvn/src/hfbtho
+export HFBTHO_ARCH=intel-mkl-openmp
+
+* Create directory $HFBTHO_DIR/$HFBTHO_ARCH if it does not exist yet
+* Create file MakeIncl in this directory
+
+Example: MakeIncl for my local installation on LC
+
+LINEAR_ALGEBRA = -L/usr/local/tools/mkl-11.0.3/lib -I/usr/local/tools/mkl-11.0.3/include \
+                 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread
+COMPILER = IFORT
+DEBUG = FALSE
+USE_OPENMP = 1
+USE_MPI = 1
+FORTRAN_MPI = mpif90
+FFLAGS =
+
+5. Run Makefile from hfbthosvn/src
+6. Go to anl/ and run Makefile there
+7. At this end of this process, you should have a $HFBTHO_DIR/$HFBTHO_ARCH/bin directory with three executables: hfbtho_main, anl_unedf0, and anl_unedf1
+
+
+   2. FULL OPTIMIZATION PACKAGE
+      -------------------------
+
+1. Choose a name for HFBTHO_ARCH and export is as environment variable
+2. Set the name where you have the hfbthosvn directory and export it as environment variable
+
+Example: My local installation on LC
+export HFBTHO_DIR=/g/g91/schunck1/Development/sandbox/HFBTHO/source/hfbthosvn
+export HFBTHO_ARCH=intel-mkl-openmp
+
+3. Create directory $HFBTHO_DIR/$HFBTHO_ARCH if it does not exist yet
+4. Create file MakeIncl in this directory
+
+Example: MakeIncl for my local installation on LC
+
+LINEAR_ALGEBRA = -L/usr/local/tools/mkl-11.0.3/lib -I/usr/local/tools/mkl-11.0.3/include \
+                 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread
+COMPILER = IFORT
+DEBUG = FALSE
+USE_OPENMP = 1
+USE_MPI = 1
+FORTRAN_MPI = mpif90
+FFLAGS =
+
+5. Run Makefile from hfbthosvn/src
+6. Go to anl/ and run Makefile there
+7. At this end of this process, you should have a $HFBTHO_DIR/$HFBTHO_ARCH/bin directory with three executables: hfbtho_main, anl_unedf0, and anl_unedf1
+
+N.B.: Attention! On LC, the latest version of the Intel compiler, mpiifort-14.0.106, gives some 'catastrophic errors' at compilation for some mysterious reason.
+
+
+   3. MACHINE-SPECIFIC REMARKS
+      ------------------------
+
+The module anl_utils.f90 uses calls to MPI_GET_ADDRESS which is a MPI-2 syntax. On LC, one should first load the MPI-2 wrapper:
+
+N.B.: Attention! On LC, the latest version of the Intel compiler, mpiifort-14.0.106, gives some 'catastrophic errors' at compilation for some mysterious reason.
+
+
+Customization: In order to run various tests, you should modify the following files, some of them before compilation:
+- anl_unedf1.f90: some global variables can be modified here *after* the initialization routine has been called
+- anl_utils.f90: the routine anl_initialize() (as the name makes it clear) initializes several important variables for HFBTHO. I assume that the others have the value set in the file hfbtho_NAMELIST.dat
+- callpounders.m: you can change the number of POUNDerS iterations there, as well as the number of variables and residuals (should be consistent with the chi2 file I reckon)
+
+Running: Assuming you run the job in some directory test_POUNDERS of your scratch directory on LC, you will have to copy a bunch of files for everything to work smoothly. I added the directory LLNL to the svn base, which a copy-clean-up of the UNEDF directory. In particular, it contains the script run_llnl_pounders.pbs: this script will copy all the necessary files and submit a job to the LC queue system. Just change the name of the directories you create and you copy to in order to make it yours.
+
+Tests on Sierra: Number of oscillator shells: 20; Number of POUNDerS function evaluations: 50; Number of datapoints: 132 (UNEDF1+ANL masses); Number of processes: 100 (using OpenMP with 6 threads, hence 600 cores); MAximum number of HFBTHO iterations: 200. With this setting, the run completed in about 5h30.
+

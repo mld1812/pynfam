@@ -1,0 +1,16 @@
+&ctr_general
+    fam_mode = 'STR'
+    fam_input_filename = 'pnfam_NAMELIST.dat'
+/
+
+&ctr_extfield
+    operator_groups = '0+', '1+', '0-', '1-', '2-'
+    operator_active =    0,    1,    0,    0,    0
+/
+
+&str_parameters
+    energy_start = 0.0
+    energy_step = 1.0
+    nr_points = 3
+    half_width = 0.25
+/

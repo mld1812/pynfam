@@ -1,0 +1,28 @@
+&CUSTOM_INTERACTION
+   ! Time-even ph
+   cr0        = 0
+   crr        = 0
+   sigma_r    = 0
+   cdrho      = 0
+   ctau       = 0
+   ctj0       = 0
+   ctj1       = 0
+   ctj2       = 0
+   crdj       = 0
+   ! Time-odd ph
+   cs0        = 0
+   csr        = 0
+   sigma_s    = 0
+   cds        = 0
+   ct         = 0
+   cj         = 0
+   csdj       = 0
+   cf         = 0
+   cgs        = 0
+   ! Pairing
+   cpair0     = 0
+   cpairr     = 0
+   cspair0    = 0
+   cspairr    = 0
+   sigma_pair = 0
+/

@@ -1,0 +1,36 @@
+&GENERAL
+   fam_mode = "STR",
+   hfb_input_filename = "hfb.solution",
+   fam_output_filename = "out1.dat",
+   log_filename = "pnfam_test_1.log"
+/
+&EXT_FIELD
+   operator_name = "GT-",
+   K = 1,
+   compute_crossterms = F
+/
+&INTERACTION
+   interaction_name = "SLY4",
+   force_j2_terms = F,
+   require_gauge_invariance = F,
+   require_self_consistency = T,
+   vpair_t0 = ,
+   vpair_t1 = ,
+   override_cs0 = ,
+   override_csr = ,
+   override_cds = ,
+   override_ct = ,
+   override_cgs = ,
+   override_cf =
+/
+&STR_PARAMETERS       ! only read and used if mode='STR'
+   energy_start = 2.0,
+   energy_step = 4.0,
+   nr_points = 3,
+   half_width = 2.0
+/
+&SOLVER
+   max_iter = 100,
+   broyden_history_size = 50,
+   convergence_epsilon = 1d-7
+/

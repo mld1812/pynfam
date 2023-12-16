@@ -1,0 +1,16 @@
+#!/bin/sh
+
+#PBS -l nodes=60:ppn=2
+#PBS -l walltime=12:00:00
+#PBS -j oe
+cd /home/sarich/working/hfbthosvn/UNEDF
+export OMP_NUM_THREADS=8
+export MV2_ENABLE_AFFINITY=0
+rm -f op8_hostfile
+touch op8_hostfile
+cat $PBS_NODEFILE | sort | uniq >> op8_hostfile
+
+matlab < callpoundersb.m
+
+
+

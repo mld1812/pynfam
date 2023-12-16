@@ -1,0 +1,34 @@
+&BETA_PARAMETERS
+   z_init               = ,
+   a_init               = ,
+   q_value              = 2.0,
+   gs_energy            = ,
+   ga_effective         = ,
+   output_file          = 'test_beta.out',
+   hfbtho_solution_file = 'solution.hfb'
+/
+&PHASE_SPACE
+   quadrature_type       = 'TRAP'
+   use_polyfit           = T
+   polynomial_order      = 6,
+   polynomial_fit_points = 200,
+   polynomial_fit_si     = 1d-5,
+   ratint_psi_gl_points  = 15
+   ratint_points         = 15
+/
+&INPUT_FILES
+   k0_f   = '',
+   k0_gt  = 'test_ctr_GT-K0.out.ctr',
+   k1_gt  = 'test_ctr_GT-K1.out.ctr',
+   k0_rs0 = '',
+   k0_ps0 = '',
+   k0_rs1 = '',
+   k1_rs1 = '',
+   k0_r   = '',
+   k1_r   = '',
+   k0_p   = '',
+   k1_p   = '',
+   k0_rs2 = '',
+   k1_rs2 = '',
+   k2_rs2 = ''
+/

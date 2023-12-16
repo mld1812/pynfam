@@ -1,0 +1,46 @@
+#!/bin/bash
+
+#MSUB -A fission
+#MSUB -q pbatch
+#MSUB -o DME_LO.out2
+#MSUB -e DME_LO.err
+#MSUB -l partition=sierra
+#MSUB -l gres=lscratche
+#MSUB -l walltime=07:00:00
+#MSUB -l nodes=50
+#MSUB -l ttc=600
+
+export OMP_NUM_THREADS=6
+export KMP_STACKSIZE=1024000000
+ulimit -s unlimited
+
+SCRATCH_DIR='/p/lscratche/schunck1/POUNDerS_DME_LO'
+if [ ! -d "$SCRATCH_DIR" ]; then
+    echo "Creating directory" $SCRATCH_DIR
+    mkdir $SCRATCH_DIR
+fi
+
+MATLAB_SRC_DIR=$SCRATCH_DIR'/src'
+if [ ! -d "$MATLAB_SRC_DIR" ]; then
+    echo "Creating directory" $MATLAB_SRC_DIR
+    mkdir $MATLAB_SRC_DIR
+fi
+
+cp $HOME'/Development/sandbox/HFBTHO/source/hfbthosvn/intel-mkl-openmp/bin/'anl_unedf1 $SCRATCH_DIR 
+cp $HOME'/Development/sandbox/HFBTHO/source/hfbthosvn/intel-mkl-openmp/bin/'hfbtho_main $SCRATCH_DIR 
+cp $HOME'/Development/sandbox/HFBTHO/source/hfbthosvn/LLNL/'runc.sh $SCRATCH_DIR
+cp $HOME'/Development/sandbox/HFBTHO/source/hfbthosvn/LLNL/'*.dat $SCRATCH_DIR
+cp $HOME'/Development/sandbox/HFBTHO/source/hfbthosvn/LLNL/'*.DAT $SCRATCH_DIR
+cp $HOME'/Development/sandbox/HFBTHO/source/hfbthosvn/LLNL/'*.m $SCRATCH_DIR
+cp $HOME'/Development/sandbox/HFBTHO/source/hfbthosvn/LLNL/'x.in $SCRATCH_DIR
+
+# Copying the MATLAB source files in order for POUNDerS to work properly
+cp -r $HOME'/Development/sandbox/HFBTHO/source/hfbthosvn/src/'poundersb $MATLAB_SRC_DIR
+
+cd $SCRATCH_DIR
+
+date
+matlab < callpoundersb.m
+date
+
+

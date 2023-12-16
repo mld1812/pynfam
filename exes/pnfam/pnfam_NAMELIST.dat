@@ -1,0 +1,42 @@
+&general
+    fam_output_filename = "GT-K1"
+    print_stdout = T
+    use_fam_storage = 0
+    real_eqrpa = 1.0
+    imag_eqrpa = .005
+/
+
+&ext_field
+    beta_type = '-'
+    operator_name = 'GT'
+    operator_k = 1
+    compute_crossterms = F
+    two_body_current_mode = 0
+    two_body_current_usep = F
+    two_body_current_lecs = -3.1926, 3.1926, 0.0
+
+/
+
+&interaction
+    interaction_name = 'SKM*'
+    require_self_consistency = T
+    require_gauge_invariance = F
+    force_j2_terms = F
+    vpair_t0 = ,
+    vpair_t1 = ,
+    override_cs0 = ,
+    override_csr = ,
+    override_cds = ,
+    override_ct = ,
+    override_cgs = ,
+    override_cf = ,
+/
+
+&solver
+    max_iter = 100
+    convergence_epsilon = 1e-07
+    broyden_history_size = 50
+    energy_shift_prot = 0.0
+    energy_shift_neut = 0.0
+    quench_residual_int = 1.0
+/

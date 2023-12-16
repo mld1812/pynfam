@@ -1,0 +1,38 @@
+&FILENAMES
+   hfb_filename     = "solution.hfb"
+   storage_basename = "mfam"
+/
+&BASIS_OPTIONS
+   k       = 0
+   parity  = 1
+   ecutoff = 30.0
+/
+&DIAGONALIZATION_OPTIONS
+   eigenvalue_upper_limit = 120.0
+   blocking_factor   = 64
+   processes_per_dim = 2
+/
+&MATRIX_ELEMENT_OPTIONS
+   check_xy_orthonormality   = F
+   check_xy_completeness     = F
+   disable_polarization_corr = F
+/
+&ODD_NUCLEUS_OPTIONS
+   block_n = 0, 1
+   block_p = 0, 1
+   even_basename = ""
+/
+&INTERACTION
+   interaction_name = "None"
+   force_j2_terms = F,
+   require_gauge_invariance = T,
+   require_self_consistency = T,
+   vpair_t0 = ,
+   vpair_t1 = ,
+   override_cs0 = ,
+   override_csr = ,
+   override_cds = ,
+   override_ct  = ,
+   override_cgs = ,
+   override_cf  =
+/

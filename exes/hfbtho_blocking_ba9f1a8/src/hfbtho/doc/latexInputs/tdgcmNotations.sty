@@ -1,0 +1,33 @@
+%% Variables
+\newcommand{\tensor}[1]{\mathsf{#1}}
+\newcommand{\gras}[1]{\boldsymbol{#1}}
+
+
+\newcommand{\qVec}{\boldsymbol{q}}
+\newcommand{\JVec}{\boldsymbol{J}}
+\newcommand{\rhoVec}{\boldsymbol{\rho}}
+\newcommand{\SVec}{\boldsymbol{S}}
+\newcommand{\omegaVec}{\boldsymbol{\omega}}
+\newcommand{\vVec}{\boldsymbol{v}}
+
+
+% Hamiltonians
+\newcommand{\TColl}{\hat{T}_\text{coll}}
+\newcommand{\VColl}{\hat{V}_\text{coll}}
+\newcommand{\HColl}{\hat{H}_\text{coll}}
+\newcommand{\TCollExpr}{
+ - \frac{\hbar^2}{2} \displaystyle \sum_{kl} \frac{1}{\sqrt{\gamma(\qVec)}} \frac{\partial }{\partial q_k} \sqrt{\gamma(\qVec)} B_{kl}(\qVec) \frac {\partial }{\partial q_l}
+}
+\newcommand{\VCollExpr}{\VColl(\qVec)}
+\newcommand{\HCollExpr}{\TCollExpr + \VCollExpr}
+
+% Matrices & vectors
+\newcommand{\Mtilde}{\tidle{M}}
+\newcommand{\Htilde}{\tidle{H}}
+\newcommand{\Atilde}{\tidle{A}}
+\newcommand{\gtilde}{\tilde{g}}
+
+
+
+% Code
+\newcommand{\theCode}{FELIX}

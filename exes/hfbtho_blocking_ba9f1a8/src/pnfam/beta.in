@@ -1,0 +1,31 @@
+&BETA_PARAMETERS
+   z_init               = ,
+   a_init               = ,
+   q_value              = ,
+   gs_energy            = ,
+   ga_effective         = ,
+   output_file          = ,
+   hfbtho_solution_file = 'hfb.solution'
+/
+&PHASE_SPACE
+   polynomial_order        = 6,
+   polynomial_fit_points   = 200,
+   polynomial_fit_si       = 1d-5,
+   use_simpsons_quadrature = F
+/
+&INPUT_FILES
+   k0_f   = 'f-k0.out.ctr',
+   k0_gt  = 'gt-k0.out.ctr',
+   k1_gt  = 'gt-k1.out.ctr',
+   k0_rs0 = 'rs0-k0.out.ctr',
+   k0_ps0 = 'ps0-k0.out.ctr',
+   k0_rs1 = 'rs1-k0.out.ctr',
+   k1_rs1 = 'rs1-k1.out.ctr',
+   k0_r   = 'r-k0.out.ctr',
+   k1_r   = 'r-k1.out.ctr',
+   k0_p   = 'p-k0.out.ctr',
+   k1_p   = 'p-k1.out.ctr',
+   k0_rs2 = 'rs2-k0.out.ctr',
+   k1_rs2 = 'rs2-k1.out.ctr',
+   k2_rs2 = 'rs2-k2.out.ctr'
+/

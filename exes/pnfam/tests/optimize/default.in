@@ -1,0 +1,40 @@
+&general
+    fam_mode = 'STR'
+    hfb_input_filename = './solution.hfb'
+    fam_output_filename = 'pnfam.out'
+    log_filename = 'pnfam.log'
+/
+
+&ext_field
+    operator_name = 'GT-'
+    k = 1
+    compute_crossterms = .true.
+/
+
+&str_parameters
+    nr_points = 1
+    energy_start = 1.0
+    energy_step = 0.0
+    half_width = 0.005
+/
+
+&interaction
+    interaction_name = 'HFB1'
+    force_j2_terms = .false.
+    require_gauge_invariance = .true.
+    require_self_consistency = .true.
+    vpair_t0 = 0.0
+    vpair_t1 = ,
+    override_cs0 = 115.683
+    override_csr = 0.0
+    override_cds = 0.0
+    override_ct = ,
+    override_cgs = ,
+    override_cf = ,
+/
+
+&solver
+    max_iter = 250
+    broyden_history_size = 50
+    convergence_epsilon = 1e-07
+/

@@ -1,0 +1,112 @@
+
+SHELL := /bin/bash
+
+# Object files
+HFBTHO_VERSION_OBJ      = hfbtho_version.o
+HFBTHO_UTILITIES_OBJ    = hfbtho_utilities.o
+HFBTHO_UNEDF_OBJ        = hfbtho_unedf.o
+HFBTHO_VARIABLES_OBJ    = hfbtho_variables.o
+HFBTHO_ELLIPINT_OBJ     = hfbtho_elliptic_integrals.o
+HFBTHO_BESSEL_OBJ       = hfbtho_bessel.o
+HFBTHO_GAUSS_OBJ        = hfbtho_gauss.o
+HFBTHO_MATH_OBJ         = hfbtho_math.o
+HFBTHO_THO_OBJ          = hfbtho_tho.o
+HFBTHO_MULTIPOLE_OBJ    = hfbtho_multipole_moments.o
+HFBTHO_COLLECTIVE_OBJ   = hfbtho_collective.o
+HFBTHO_FISSION_OBJ      = hfbtho_fission.o
+HFBTHO_SOLVER_OBJ       = hfbtho_solver.o
+HFBTHO_STORAGE_OBJ      = hfbtho_storage.o
+HFBTHO_MPIMT_OBJ        = hfbtho_large_scale.o
+HFBTHO_FUNCTIONAL_OBJ   = hfbtho_read_functional.o
+HFBTHO_GOGNY_OBJ        = hfbtho_gogny.o
+HFBTHO_LOCALIZATION_OBJ = hfbtho_localization.o
+HFBTHO_IO_OBJ           = hfbtho_io.o
+HFBTHO_PNP_OBJ          = hfbtho_pnp.o
+HFBTHO_LIPKIN_OBJ       = hfbtho_lipkin.o
+HFBTHO_PROJECTIONS_OBJ  = hfbtho_projections.o
+
+# Build HFBTHO
+all: $(HFBTHO_EXE) libhfbtho.a
+
+# Dependencies
+$(HFBTHO_VERSION_OBJ) :
+$(HFBTHO_UTILITIES_OBJ) :
+$(HFBTHO_UNEDF_OBJ) : $(HFBTHO_UTILITIES_OBJ)
+$(HFBTHO_VARIABLES_OBJ) : $(HFBTHO_VERSION_OBJ) $(HFBTHO_UNEDF_OBJ)
+$(HFBTHO_LIPKIN_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ)
+$(HFBTHO_GOGNY_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ)
+$(HFBTHO_GAUSS_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ)
+$(HFBTHO_MULTIPOLE_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ)
+$(HFBTHO_COLLECTIVE_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ) \
+                           $(HFBTHO_MULTIPOLE_OBJ) $(LAPACK_OBJ) $(BLAS_OBJ)
+$(HFBTHO_FISSION_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ) $(HFBTHO_GAUSS_OBJ)
+$(HFBTHO_PNP_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ) $(HFBTHO_MULTIPOLE_OBJ) $(HFBTHO_BESSEL_OBJ)
+$(HFBTHO_IO_OBJ) : $(HFBTHO_VARIABLES_OBJ) \
+                   $(HFBTHO_COLLECTIVE_OBJ) \
+                   $(HFBTHO_FISSION_OBJ) \
+                   $(HFBTHO_GOGNY_OBJ) \
+                   $(HFBTHO_MULTIPOLE_OBJ) \
+                   $(HFBTHO_UTILITIES_OBJ)
+$(HFBTHO_MPIMT_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ)
+$(HFBTHO_ELLIPINT_OBJ) : $(HFBTHO_UTILITIES_OBJ)
+$(HFBTHO_BESSEL_OBJ) : $(HFBTHO_UTILITIES_OBJ)
+$(HFBTHO_FUNCTIONAL_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ)
+$(HFBTHO_MATH_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ)
+$(HFBTHO_THO_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ) $(HFBTHO_LINALGEB_OBJ)
+$(HFBTHO_STORAGE_OBJ) :  $(HFBTHO_UNEDF_OBJ) $(HFBTHO_VARIABLES_OBJ)
+$(HFBTHO_LOCALIZATION_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ)
+$(HFBTHO_SOLVER_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ) $(HFBTHO_MATH_OBJ) \
+                       $(HFBTHO_MULTIPOLE_OBJ) $(HFBTHO_COLLECTIVE_OBJ) \
+                       $(HFBTHO_FISSION_OBJ) $(HFBTHO_GOGNY_OBJ) $(HFBTHO_PNP_OBJ) \
+                       $(HFBTHO_IO_OBJ) $(HFBTHO_THO_OBJ) $(HFBTHO_LIPKIN_OBJ) \
+                       $(HFBTHO_GAUSS_OBJ) $(HFBTHO_BESSEL_OBJ) \
+                       $(HFBTHO_ELLIPINT_OBJ) $(HFBTHO_UNEDF_OBJ) \
+                       $(LAPACK_OBJ) $(BLAS_OBJ)
+$(HFBTHO_PROJECTIONS_OBJ) : $(HFBTHO_MATH_OBJ) $(HFBTHO_UTILITIES_OBJ) \
+                            $(HFBTHO_SOLVER)
+
+# HFBTHO (1/3): object file
+$(HFBTHO_OBJ) : $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_VARIABLES_OBJ) \
+                $(HFBTHO_STORAGE_OBJ) $(HFBTHO_MPIMT_OBJ) \
+                $(HFBTHO_SOLVER_OBJ) $(HFBTHO_FUNCTIONAL_OBJ) \
+                $(HFBTHO_LOCALIZATION_OBJ) $(HFBTHO_PROJECTIONS_OBJ)
+
+# HFBTHO (2/3): all object files from Fortran modules
+GLOBAL_OBJECTS = $(HFBTHO_VERSION_OBJ) $(HFBTHO_UTILITIES_OBJ) $(HFBTHO_UNEDF_OBJ) \
+                 $(HFBTHO_VARIABLES_OBJ) $(HFBTHO_ELLIPINT_OBJ) $(HFBTHO_BESSEL_OBJ) \
+                 $(HFBTHO_GAUSS_OBJ) $(HFBTHO_MATH_OBJ) $(HFBTHO_THO_OBJ) \
+                 $(HFBTHO_MULTIPOLE_OBJ) $(HFBTHO_COLLECTIVE_OBJ) $(HFBTHO_FISSION_OBJ) \
+                 $(HFBTHO_SOLVER_OBJ) $(HFBTHO_STORAGE_OBJ) $(HFBTHO_MPIMT_OBJ) \
+                 $(HFBTHO_FUNCTIONAL_OBJ) $(HFBTHO_GOGNY_OBJ) $(HFBTHO_LOCALIZATION_OBJ) \
+                 $(HFBTHO_IO_OBJ) $(HFBTHO_PNP_OBJ) $(HFBTHO_LIPKIN_OBJ) $(HFBTHO_PROJECTIONS_OBJ)
+
+# HFBTHO (3/3): executable
+$(HFBTHO_EXE) : $(HFBTHO_OBJ) $(GLOBAL_OBJECTS)
+ifeq ($(VERBOSE),1)
+	$(FORTRAN_MPI) $(FORMAT_F90) $(OPTIONS) -o $@ $^ $(LINEAR_ALGEBRA)
+else
+	@echo "Assembling \"$@\"..."
+	@$(FORTRAN_MPI) $(FORMAT_F90) $(OPTIONS) -o $@ $^ $(LINEAR_ALGEBRA)
+endif
+
+# HFBTHO (4/4): library
+libhfbtho.a: $(GLOBAL_OBJECTS)
+	@echo "Building library..."
+	ar rcs $@ $(GLOBAL_OBJECTS)
+
+# Compiling
+%.o : %.f90
+ifeq ($(VERBOSE),1)
+	$(FORTRAN_MPI) -c $< $(FORMAT_F90) $(OPTIONS)
+else
+	@echo "Compiling  \"$@\"..."
+	@$(FORTRAN_MPI) -c $< $(FORMAT_F90) $(OPTIONS)
+endif
+
+# Cleaning
+clean :
+	-rm -f *.o *.oo *.ipo *.mod
+
+# Deep cleaning
+mrproper : clean
+	rm -f $(HFBTHO_EXE) libhfbtho.a

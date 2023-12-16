@@ -1,0 +1,8 @@
+LINEAR_ALGEBRA = -L/usr/local/tools/mkl-11.0.3/lib -I/usr/local/tools/mkl-11.0.3/include \
+                 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread
+COMPILER = IFORT
+DEBUG = FALSE
+USE_OPENMP = 1
+USE_MPI = 1
+FORTRAN_MPI = mpif90
+FFLAGS = 

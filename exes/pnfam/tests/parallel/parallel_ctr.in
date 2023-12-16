@@ -1,0 +1,6 @@
+&PARALLEL
+  nr_adlb_servers = 0,
+  nr_parameter_files = 2
+/
+"default_contour_gt0.in"
+"default_contour_gt1.in"

@@ -1,0 +1,104 @@
+The matrix part of PNFAM contains three main programs, two auxiliary routines,
+and a set of helper functions and subroutines.  The helper functions and
+subroutines are contained in the file `mod_common.f90`.
+
+The main programs expect either 1) an input file passed via `ARGV` or 2) a file
+named "matrix.in" in the working directory. An example named "sample.in" is
+provided in this directory.
+
+### Main programs
+
+1. `main_abmatrix.f90` --- calculate the QRPA A and B matrices using the FAM.
+    The matrices are stored in lower-triangular packed storage.  This is a
+    highly parallel computation and can be spread to hundreds of processors. It
+    also can use OpenMP (via hamiltonian.f90) if compiled with the correct flag.
+
+2. `main_diagonalize.f90` --- diagonalize the QRPA matrices calculated in step 1
+    using MPI, BLACS, and Scalapack, potentially excluding an orbital and its
+    time-reversed partner. SCALAPACK IS REQUIRED TO COMPILE THIS EXECUTABLE.
+
+3. `main_transitions_twoqp.f90` --- use the X and Y amplitudes from the
+    diagonalization to compute QRPA matrix elements of a suite of operators. For
+    an odd nucleus, this is done in the space which excludes the odd q.p.
+    orbital and its time-reversed partner.
+
+4. `main_odd_matrix_elements.f90` --- calculate the effect of the odd
+    quasiparticle on the even-even mean field. These matrix elements are
+    required for the corrected 1-to-1 transitions.
+
+5. `main_transitions_oneqp.f90` --- calculate 1-to-1 q.p. transitions with the
+    even-even core as a spectator.  Unless disabled, this includes the
+    first-order QRPA correction to the matrix elements, combining even-even X
+    and Y amplitudes with the matrix elements calculated using
+    `main_odd_matrix_elements.f90`.
+
+### Auxiliary routines
+
+1. `aux_basis_sizes.f90` --- calculate the dimension of the two-quasiparticle
+    basis for a range of possible cutoffs on the one-quasiparticle energy for 
+    different K and parities.
+
+2. `aux_basis_cutdown.f90` --- take the A and B matrices calculated earlier and
+    select only the matrix elements which contribute below some new value of the
+    single-quasiparticle cutoff energy.
+
+### Input namelist
+
+#### `FILENAMES`
+
+These are the usual input/output options.
+
+* `hfb_filename` --
+    HFBTHO binary solution file
+
+* `storage_basename` --
+    prefix used to store results (e.g. "PREFIX.n.ab", "PREFIX.xy", "PREFIX.me")
+
+#### `BASIS_OPTIONS`
+
+These control the basis used for the QRPA calculations and affect most or all of the three core components (A and B matrices, diagonalization, and transition strengths).
+
+* `k` --
+    intrinsic angular momentum projection of the transitions
+
+* `parity` --
+    parity of the transitions (1 or -1)
+
+* `ecutoff` --
+    cutoff on the quasiparticles which can form a two-quasiparticle basis state. Choosing Ecutoff < 0 sets the cut equal to the HFBTHO pairing window (effectively turns it off).
+
+#### `DIAGONALIZATION_OPTIONS`
+
+* `eigenvalue_upper_limit` --
+    largest QRPA eigenvalue to include in the diagonalization. This doesn't really affect performance, so it's only useful for truncating the solution a bit.
+
+* `blocking_factor` --
+    blocking factor used to distribute data in the 2D block-cyclic fashion.
+
+* `processes_per_dim` --
+    the diagonalization proceeds only using square process grids with `processes_per_dim**2` MPI processes.
+
+#### `MATRIX_ELEMENT_OPTIONS`
+
+* `check_xy_orthonormality` --
+    enable runtime checks of the QRPA orthonormality.  This is pretty slow.
+
+* `check_xy_completeness` --
+    enable runtime checks of the QRPA completeness.  This is **very** slow.
+
+* `disable_polarization_corr` --
+    turn off the QRPA correction to the odd-nucleus 1-to-1 matrix elements.
+
+#### `ODD_NUCLEUS_OPTIONS`
+
+* `block_n` --
+    for calculating an odd-mass decay rate. Remove the lowest-energy neutron q.p. state with the specified 2*K and parity from diagonalization and calculation of transition strengths.  This does not affect the calculation of the A and B matrices, only the diagonalization and transitions.  Specified by two integers: "-3, -1" would block the lowest-lying K=-3/2 state with negative parity.
+
+* `block_p` -- the same as `block_n`, but for protons.
+
+* `even_basename` --
+    prefix used to store results for the *even-even* nucleus (e.g. "PREFIX.n.ab", "PREFIX.xy", "PREFIX.me").  This only affects diagonalization and transitions for the odd-nucleus calculation which depends on corresponding even-even quantities.
+
+#### `INTERACTION`
+
+This is the "standard" interaction namelist from the main PNFAM code, passed to `interaction.f90` in a similar way as the main codebase.

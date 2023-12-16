@@ -1,0 +1,237 @@
+Common subdirectories: hfbtho/examples and new/examples
+diff -u hfbtho/hfbtho_v200d.f90 new/hfbtho_v200d.f90
+--- hfbtho/hfbtho_v200d.f90	2013-02-06 01:54:24.000000000 -0500
++++ new/hfbtho_v200d.f90	2015-08-05 16:20:09.000000000 -0400
+@@ -62,10 +62,12 @@
+ !==================================================================================================================================
+ Module HFBTHO_VERSION
+   Implicit None
+-  Character(6) :: Version='200d'
++  Character(6) :: Version='200dx'
+   !--------------------------------------------------------------------------------------
+   ! Version History
+   !--------------------------------------------------------------------------------------
++  ! ver#200dx: added an output extension to be used with pnFAM
++  !            (M.T. Mustonen and T. Shafer)
+   ! ver#200d: fixed bug in gfv; improved legibility and accuracy of coulom and coulom1
+   ! ver#200c: added LLNL release number
+   ! ver#200b: added module linear_algebra, analyzing THO, formatted output, fixed bug
+@@ -4243,6 +4245,198 @@
+ !==================================================================================================================================
+ !#END bessik
+ !==================================================================================================================================
++!#START HFBTHO_storage
++!==================================================================================================================================
++module HFBTHO_storage
++   implicit none
++   
++   ! Version number to check against
++   integer, parameter :: VERSION = 9
++   
++   contains
++   
++   ! ---------------------------------------------------------------------------
++   ! Saves the relevant HFBTHO solution information to file for re-use by FAM.
++   ! ---------------------------------------------------------------------------
++   subroutine save_HFBTHO_solution(plaintext)
++      use UNEDF,  only: cr0 => crho, crr => cdrho, ctau, cdrho => crdr, ctj => cj, crdj, use_j2terms
++      use HFBTHO, only: nb, id, REqpP, RUqpP, RVqpP, REqpN, RUqpN, RVqpN, nr, nz, nl, ns, npar,    &
++                        nghl, wdcori, y_opt, fh, qhla_opt, fi1r_opt, fi1z_opt, fi2d_opt, npr, ala, &
++                        alast, del, cpv0, cpv1, bet, ehfb, pwi, fn_T, fp_T, temper, entropy,       &
++                        switch_on_temperature, nbx, ka, kd, KqpP, KpwiP, KqpN, KpwiN
++
++      implicit none
++      
++      logical, intent(in), optional :: plaintext
++      logical :: save_as_text
++      
++      integer :: ifh, ierr
++      
++      ! Option to save in plain text
++      save_as_text = .false.
++      if (present(plaintext)) then
++         if (plaintext .eqv. .true.) then
++            save_as_text = .true.
++         end if
++      end if
++      
++      ! Open the file
++      ifh = 77
++      if (save_as_text) then
++         write(*,'(/a)') ' ### STORING HFB SOLUTION (PLAINTEXT format)'
++         write(*,'(a)')  ' Filename: "hfb.solution.txt"'
++         open(unit=ifh, file='hfb.solution.txt', status='unknown', iostat=ierr)
++      else
++         write(*,'(/a)') ' ### STORING HFB SOLUTION (BINARY format)'
++         write(*,'(a)')  ' Filename: "hfb.solution"'
++         open(unit=ifh, file='hfb.solution', status='unknown', form='unformatted', iostat=ierr)
++      end if
++      
++      if (ierr /= 0) then
++         write(*,'(a,i0)') ' Error saving HFB solution: could not open file to write. Error', ierr
++         stop
++      end if
++      
++      ! ------------------------------------------------------------------------
++      ! Store the HFB solution details to 'hfb.solution(.txt if plain text)'
++      ! ------------------------------------------------------------------------
++      
++      if (.not. save_as_text) then
++         ! The solution version number
++         write(ifh) VERSION
++      
++         ! Basic HFB quantities
++         ! N, Z, A where applicable
++         write(ifh) npr(:)             ! Particle number
++         write(ifh) ala(:)             ! Lambdas ala (quasiparticles measured w.r.t. these, I think)
++         write(ifh) alast(:)           ! Lambdas alast (last-bound s.p. energy)
++         write(ifh) del(:)             ! Pairing gaps
++         write(ifh) pwi                ! Pairing window
++         write(ifh) CpV0(:), CpV1(:)   ! Pairing strengths
++         write(ifh) bet                ! Total deformation
++         write(ifh) ehfb               ! Binding energy
++      
++         ! The HFB quasiparticle energies and amplitudes
++         write(ifh) nbx
++         write(ifh) nb
++         write(ifh) id(:)
++         write(ifh) REqpP(:)
++         write(ifh) RVqpP(:)
++         write(ifh) RUqpP(:)
++         write(ifh) REqpN(:)
++         write(ifh) RVqpN(:)
++         write(ifh) RUqpN(:)
++         
++         ! Pairing window active q.p. levels
++         write(ifh) ka(:,:)
++         write(ifh) kd(:,:)
++         write(ifh) KqpP(:)
++         write(ifh) KpwiP(:)
++         write(ifh) KqpN(:)
++         write(ifh) KpwiN(:)
++      
++         ! Basis state quantum numbers
++         write(ifh) nr(:)
++         write(ifh) nz(:)
++         write(ifh) nl(:)
++         write(ifh) ns(:)
++         write(ifh) npar(:)
++      
++         ! Wave functions and integration data
++         write(ifh) nghl                      ! number of integration points
++         write(ifh) wdcori(:)                 ! inverse of integration weights
++         write(ifh) y_opt(:)                  ! 1/rho in 'fm^(-1)'
++         write(ifh) fh(:)                     ! z in 'fm'
++         write(ifh) transpose(qhla_opt(:,:))  ! 1st index: state, 2nd index: coordinate (before transposing)
++         write(ifh) transpose(fi1r_opt(:,:))  ! 1st index: state, 2nd index: coordinate (before transposing)
++         write(ifh) transpose(fi1z_opt(:,:))  ! 1st index: state, 2nd index: coordinate (before transposing)
++         write(ifh) transpose(fi2d_opt(:,:))  ! 1st index: state, 2nd index: coordinate (before transposing)
++
++         ! Time-even isovector coupling constants from HFB mean field
++         write(ifh) cr0(1), crr(1), cdrho(1), ctau(1), ctj(1), crdj(1)
++         ! Store .TRUE. => 1, .FALSE. => 0
++         write(ifh) merge(1, 0, use_j2terms)
++         
++         ! Temperature-dependence of the HFB solution
++         ! Store .TRUE. => 1, .FALSE. => 0
++         write(ifh) merge(1, 0, switch_on_temperature)
++         write(ifh) temper
++         write(ifh) entropy
++         write(ifh) fp_T(:)
++         write(ifh) fn_T(:)
++      else
++         ! The solution version number
++         write(ifh,*) VERSION
++      
++         ! Basic HFB quantities
++         ! N, Z, A where applicable
++         write(ifh,*) npr(:)           ! Requested particle number
++         write(ifh,*) ala(:)           ! Lambdas ala (quasiparticles measured w.r.t. these, I think)
++         write(ifh,*) alast(:)         ! Lambdas alast (last-bound s.p. energy)
++         write(ifh,*) del(:)           ! Pairing gaps
++         write(ifh,*) pwi              ! Pairing window
++         write(ifh,*) CpV0(:), CpV1(:) ! Pairing strengths
++         write(ifh,*) bet              ! Total deformation
++         write(ifh,*) ehfb             ! Binding energy
++      
++         ! The HFB quasiparticle energies and amplitudes
++         write(ifh,*) nbx
++         write(ifh,*) nb
++         write(ifh,*) id(:)
++         write(ifh,*) REqpP(:)
++         write(ifh,*) RVqpP(:)
++         write(ifh,*) RUqpP(:)
++         write(ifh,*) REqpN(:)
++         write(ifh,*) RVqpN(:)
++         write(ifh,*) RUqpN(:)
++         
++         ! Pairing window active q.p. levels
++         write(ifh,*) ka(:,:)
++         write(ifh,*) kd(:,:)
++         write(ifh,*) KqpP(:)
++         write(ifh,*) KpwiP(:)
++         write(ifh,*) KqpN(:)
++         write(ifh,*) KpwiN(:)
++      
++         ! Basis state quantum numbers
++         write(ifh,*) nr(:)
++         write(ifh,*) nz(:)
++         write(ifh,*) nl(:)
++         write(ifh,*) ns(:)
++         write(ifh,*) npar(:)
++      
++         ! Wave functions and integration data
++        write(ifh,*) nghl                      ! number of integration points
++        write(ifh,*) wdcori(:)                 ! inverse of integration weights
++        write(ifh,*) y_opt(:)                  ! 1/rho in 'fm^(-1)'
++        write(ifh,*) fh(:)                     ! z in 'fm'
++        write(ifh,*) transpose(qhla_opt(:,:))  ! 1st index: state, 2nd index: coordinate (before transposing)
++        write(ifh,*) transpose(fi1r_opt(:,:))  ! 1st index: state, 2nd index: coordinate (before transposing)
++        write(ifh,*) transpose(fi1z_opt(:,:))  ! 1st index: state, 2nd index: coordinate (before transposing)
++        write(ifh,*) transpose(fi2d_opt(:,:))  ! 1st index: state, 2nd index: coordinate (before transposing)
++
++        ! Time-even isovector coupling constants from HFB mean field
++        write(ifh,*) cr0(1), crr(1), cdrho(1), ctau(1), ctj(1), crdj(1)
++        ! Store .TRUE. => 1, .FALSE. => 0
++        write(ifh,*) merge(1, 0, use_j2terms)
++        
++        ! Temperature-dependence of the HFB solution
++        ! Store .TRUE. => 1, .FALSE. => 0
++        write(ifh,*) merge(1, 0, switch_on_temperature)
++        write(ifh,*) temper
++        write(ifh,*) entropy
++        write(ifh,*) fp_T(:)
++        write(ifh,*) fn_T(:)
++      end if
++
++      close(ifh)
++      write(*,'(a)') ' Storage completed.'
++   end subroutine save_HFBTHO_solution
++   
++end module HFBTHO_storage
++!==================================================================================================================================
++!#END HFBTHO_storage
++!==================================================================================================================================
+ !#START HFBTHO_SOLVER
+ !==================================================================================================================================
+ Subroutine HFBTHO_SOLVER
+diff -u hfbtho/main_v200d.f90 new/main_v200d.f90
+--- hfbtho/main_v200d.f90	2012-12-14 12:22:32.000000000 -0500
++++ new/main_v200d.f90	2015-08-05 16:15:36.000000000 -0400
+@@ -68,6 +68,7 @@
+   Subroutine Main_Program
+     Use HFBTHO_utilities
+     Use HFBTHO
++    Use HFBTHO_storage
+     Implicit None
+     Integer(ipr) :: iblocase(2),nkblocase(2,5)
+     Integer(ipr) :: i,it,icount,l,noForce
+@@ -219,6 +220,8 @@
+     !
+     If (lout.Lt.lfile) Close(lfile) ! close the output
+     !
++    call save_HFBTHO_solution  ! for pnFAM
++    !
+   End Subroutine Main_Program
+ !==================================================================================================================================
+ !#END MAINPROGRAM

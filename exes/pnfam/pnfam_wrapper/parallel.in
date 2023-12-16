@@ -1,0 +1,18 @@
+&PARALLEL
+  nr_adlb_servers = 0,
+  nr_parameter_files = 14
+/
+"F-K0.in"
+"GT-K0.in"
+"GT-K1.in"
+"P-K0.in"
+"P-K1.in"
+"PS0-K0.in"
+"R-K0.in"
+"R-K1.in"
+"RS0-K0.in"
+"RS1-K0.in"
+"RS1-K1.in"
+"RS2-K0.in"
+"RS2-K1.in"
+"RS2-K2.in"

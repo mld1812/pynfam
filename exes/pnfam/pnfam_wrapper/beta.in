@@ -1,0 +1,34 @@
+&BETA_PARAMETERS
+   z_init               = ,
+   a_init               = ,
+   q_value              = ,
+   gs_energy            = ,
+   ga_effective         = ,
+   output_file          = ,
+   hfbtho_solution_file = 'solution.hfb'
+/
+&PHASE_SPACE
+   quadrature_type       = 'GAUSS',
+   use_polyfit           = F,
+   polynomial_order      = 6,
+   polynomial_fit_points = 200,
+   polynomial_fit_si     = 1d-5,
+   ratint_psi_gl_points  = 15,
+   ratint_points         = 20
+/
+&INPUT_FILES
+   k0_f   = 'F-K0.out.ctr',
+   k0_gt  = 'GT-K0.out.ctr',
+   k1_gt  = 'GT-K1.out.ctr',
+   k0_rs0 = 'RS0-K0.out.ctr',
+   k0_ps0 = 'PS0-K0.out.ctr',
+   k0_rs1 = 'RS1-K0.out.ctr',
+   k1_rs1 = 'RS1-K1.out.ctr',
+   k0_r   = 'R-K0.out.ctr',
+   k1_r   = 'R-K1.out.ctr',
+   k0_p   = 'P-K0.out.ctr',
+   k1_p   = 'P-K1.out.ctr',
+   k0_rs2 = 'RS2-K0.out.ctr',
+   k1_rs2 = 'RS2-K1.out.ctr',
+   k2_rs2 = 'RS2-K2.out.ctr'
+/

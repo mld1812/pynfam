@@ -1,0 +1,6 @@
+&PARALLEL
+  nr_adlb_servers = 1,
+  nr_parameter_files = 2
+/
+"default.in"
+"default2.in"
