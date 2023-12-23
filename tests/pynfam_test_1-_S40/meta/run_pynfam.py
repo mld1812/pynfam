@@ -5,7 +5,7 @@ from pynfam import pynfam_mpi_calc
 pynfam_inputs = {
  'directories': {
      #'outputs' : 'pynfam_test_S40_0-_2bcP275MeV',
-     'outputs' : 'pynfam_test_1-_S40_2bc',
+     'outputs' : 'pynfam_test_1-_S40',
      #'outputs' : 'pynfam_test_S40_0-_open_2bc',
      #'outputs' : 'pynfam_test_Gd220_0-_open_2bc',
      'exes'    : './exes',
@@ -45,7 +45,7 @@ override_settings = {
 	    #'nr_points' : 60
 	   },
 
- 'fam' : { 'two_body_current_mode': 111010 #digit 4: GT, digit 5: P, digit 6: PS0; 1 = 2bc, 2 = DME
+ 'fam' : { #'two_body_current_mode': 111001 #digit 4: GT, digit 5: P, digit 6: PS0; 1 = 2bc, 2 = DME
           #'two_body_current_usep': False,
           #'two_body_current_lecs': [-3.1962, 3.1962, 0]
           },

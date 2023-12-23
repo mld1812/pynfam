@@ -668,7 +668,7 @@ class shapeFactor(phaseSpace):
                     (-2.0/9.0*(ec*xp*b[u'R'][k] - ec*2.0*LAM**2.0*xm*b[u'RS1'][k]\
                     + LAM*np.sqrt(2.0)*(xp-xm)*b[u'R_RS1'][k]\
                     - ec*np.sqrt(3.0)*b[u'R_P'][k] - LAM*np.sqrt(6.0)*b[u'P_RS1'][k]))*ps[u'f1']
-
+ 
             C[u'J1_R2'][k] = \
                     (b[u'P'][k] +\
                     1.0/3.0*xp**2.0*b[u'R'][k] +\
@@ -684,7 +684,11 @@ class shapeFactor(phaseSpace):
             else:
                 C[u'J1_R2'][k] += -8.0/27.0*(LAM**2.0*b[u'RS1'][k] +\
                         (ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]))*mu1*gamma1*ps[u'f2']
-
+            #C[u'J1_R2'][k] = (np.sqrt(2.0/3.0) * -np.sqrt(2.0)*xp*b[u'R_P'][k] )* ps[u'f2']
+            #C[u'J1_R2'][k] = (2.0/3.0*LAM**2.0*xm**2.0*b[u'RS1'][k] + 1.0/27.0*2.0*LAM**2.0*b[u'RS1'][k] -\
+            #                   8.0/27.0*(LAM**2.0*b[u'RS1'][k]*mu1*gamma1))*ps[u'f2']
+            #C[u'J1_R2'][k] = (1.0/27.0*ec*2.0*np.sqrt(2.0)*LAM*b[u'R_RS1'][k] + np.sqrt(2.0/3.0) *\
+            #                   -ec*2.0/np.sqrt(3.0)*LAM*xm*xp*b[u'R_RS1'][k] - 8.0/27.0*ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]*mu1*gamma1) * ps[u'f2']
             C[u'J1_R3'][k] = \
                     (4.0/3.0*(np.sqrt(2.0)/3.0*LAM*xp*b[u'R_RS1'][k] +\
                     -ec*2.0/3.0*LAM**2.0*xm*b[u'RS1'][k] +\
@@ -692,11 +696,11 @@ class shapeFactor(phaseSpace):
 
             C[u'J1_R4'][k] = \
                     (8.0/27.0*LAM**2.0*b[u'RS1'][k])*ps[u'f4']
-
+            
             C[u'J1_R5'][k] = \
                     (1.0/27.0*(2.0*b[u'R'][k] + LAM**2.0*b[u'RS1'][k] +\
                     ec*2.0*np.sqrt(2.0)*LAM*b[u'R_RS1'][k]))*ps[u'f5']
-
+            
             C[u'J1_R6'][k] = \
                     (1.0/27.0*(2.0*b[u'R'][k] + LAM**2.0*b[u'RS1'][k] +\
                     -ec*2.0*np.sqrt(2.0)*LAM*b[u'R_RS1'][k]))*ps[u'f6']

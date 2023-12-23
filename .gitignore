@@ -1,0 +1,6 @@
+/keyfile
+/keyfile.pub
+__pycache__/
+#fortran binaries
+*.mod
+*.o
