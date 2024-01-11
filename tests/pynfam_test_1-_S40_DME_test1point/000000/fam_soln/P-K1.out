@@ -1,0 +1,10 @@
+# pnFAM code version:   2.00
+# Total run time:       0.003296 mins
+# All points converged: No
+# Residual interaction: SKOP
+# Operator:             P- with K=1
+# Contour:              CONSTL on (2.00e+00, 2.25e+01)
+# Temperature:          0.000000 (Prefactor=False)
+#
+                    Re(EQRPA)                 Im(EQRPA)              Re(Strength)              Im(Strength)                   Re(PxR)                   Im(PxR)                 Re(PxRS1)                 Im(PxRS1)                   Re(PxP)                   Im(PxP)                      Time Conv
+0      2.0000000000000000e+00    5.0000000000000000e-01    1.2406018590561532e-01   -2.0031019129936440e-03    4.9169001402207126e-02    8.9030552409635894e-03    6.8803798214901762e-02   -1.6165722149080403e-03    1.2406018590561532e-01   -2.0031019129936440e-03    3.2959999999999999e-03   No

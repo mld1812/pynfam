@@ -7,7 +7,7 @@ pynfam_inputs = {
      #'outputs' : 'pynfam_test_S40_0-_2bcP275MeV',
      'outputs' : 'pynfam_test_1-_S40_2bc',
      #'outputs' : 'pynfam_test_S40_0-_open_2bc',
-     #'outputs' : 'pynfam_test_Gd220_0-_open_2bc',
+     #'outputs' : 'pynfam_test_Gd162_1+_open',
      'exes'    : './exes',
      'scratch' : './tests'
      },
@@ -30,7 +30,7 @@ pynfam_inputs = {
 }
 
 override_settings = {
- 'hfb' : {'proton_number'    : 16,
+ 'hfb' : {'proton_number'    : 16, #64, 98 - Gd162
           'neutron_number'   : 24,
           'number_of_shells' : 6, 
           'number_gauss'     : 20, 

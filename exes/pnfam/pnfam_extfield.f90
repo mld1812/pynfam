@@ -322,27 +322,33 @@ contains
                      select case (K)
                         case (0)
                            if ((xl1 == xl2) .and. (xs1 == xs2)) then
+                              if (op%use_2bc(5) == 1) then
+                                 correction_2bc_vector = forbidden_2bc_P()
+                              else if (op%use_2bc(5) == 2) then !use DME
+                                 correction_2bc_vector = dme_vector()
+                              end if
                               if (op%use_2bc(1) == 0 .or. op%use_2bc(5) == 0) then !just 1 body.
                                  op%mat%elem(ipt) = -dot_product(wf_1(:), dz_wf_2(:)) !derivative of wavefunction 2 in z direction.
                               else if (op%use_2bc(1) == 1) then !1 body and 2 body.
-                                 correction_2bc_vector = forbidden_2bc_exc() !get correction term, which is also an array over the 2d quadrature grid.
                                  op%mat%elem(ipt) = -dot_product(wf_1(:) * (1 + correction_2bc_vector(:)), dz_wf_2(:)) 
                               else if (op%use_2bc(1) == 2) then !just 2 body.
-                                 correction_2bc_vector = forbidden_2bc_exc()
                                  op%mat%elem(ipt) = -dot_product(wf_1(:) * correction_2bc_vector(:), dz_wf_2(:)) 
                               end if
                            end if
                         case (1,-1)
                            if ((xl1 == xl2 + K) .and. (xs1 == xs2)) then
+                              if (op%use_2bc(5) == 1) then
+                                 correction_2bc_vector = forbidden_2bc_P()
+                              else if (op%use_2bc(5) == 2) then !use DME
+                                 correction_2bc_vector = dme_vector()
+                              end if
                               if (op%use_2bc(1) == 0 .or. op%use_2bc(5) == 0) then !just 1 body.
                                  op%mat%elem(ipt) = K/sqrt(2.0_dp) * (dot_product(wf_1(:), dr_wf_2(:))   &
                                  - K*xl2 * dot_product(wf_1(:), y(:)*wf_2(:))) !radial and angular components of gradient. y corresponds to 1/r. 
                               else if (op%use_2bc(1) == 1) then !1 body and 2 body.
-                                 correction_2bc_vector = forbidden_2bc_exc()
                                  op%mat%elem(ipt) = K/sqrt(2.0_dp)* (dot_product(wf_1(:) * (1.0_dp + correction_2bc_vector(:)) , dr_wf_2(:))   &
                                  - K*xl2*dot_product(wf_1(:) * (1.0_dp + correction_2bc_vector(:)), y(:)*wf_2(:)))
                               else if (op%use_2bc(1) == 2) then !just 2 body.
-                                 correction_2bc_vector = forbidden_2bc_exc()
                                  op%mat%elem(ipt) = K/sqrt(2.0_dp)*(dot_product(wf_1(:) * correction_2bc_vector(:), dr_wf_2(:))   &
                                  - K*xl2*dot_product(wf_1(:) * correction_2bc_vector(:), y(:)*wf_2(:))) 
                               end if
@@ -409,12 +415,12 @@ contains
                      ! PS0 (p.sigma/i)
                      ! ----------------------------------------
                      case ('PS0')
-                        if (op%use_2bc(6) == 1) then
-                           correction_2bc_axial_charge = forbidden_2bc_PS0()
-                        else if (op%use_2bc(6) == 2) then !use DME
-                           correction_2bc_axial_charge = dme_axial()
-                        end if
                         if ((xl1 == xl2) .and. (xs1 == xs2)) then
+                           if (op%use_2bc(6) == 1) then !assign 2bc correction array
+                              correction_2bc_axial_charge = forbidden_2bc_PS0()
+                           else if (op%use_2bc(6) == 2) then !use DME
+                              correction_2bc_axial_charge = dme_axial()
+                           end if
                            if (op%use_2bc(1) == 0 .or. op%use_2bc(6) == 0) then !just one body
                               op%mat%elem(ipt) = -xs1*dot_product(wf_1(:), dz_wf_2(:))
                            else if (op%use_2bc(1) == 1) then !1bc + 2bc
@@ -423,6 +429,11 @@ contains
                               op%mat%elem(ipt) = -xs1*dot_product(wf_1(:) * correction_2bc_axial_charge(:), dz_wf_2(:))
                            end if
                         else if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
+                           if (op%use_2bc(6) == 1) then
+                              correction_2bc_axial_charge = forbidden_2bc_PS0()
+                           else if (op%use_2bc(6) == 2) then !use DME
+                              correction_2bc_axial_charge = dme_axial()
+                           end if
                            if (op%use_2bc(1) == 0 .or. op%use_2bc(6) == 0) then !just one body
                               op%mat%elem(ipt) = -dot_product(wf_1(:), dr_wf_2(:))      &
                                   - xl2*dot_product(wf_1(:), y(:)*wf_2(:))
@@ -434,6 +445,11 @@ contains
                               - xl2*dot_product(wf_1(:) * correction_2bc_axial_charge, y(:)*wf_2(:))
                            end if
                         else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
+                           if (op%use_2bc(6) == 1) then
+                              correction_2bc_axial_charge = forbidden_2bc_PS0()
+                           else if (op%use_2bc(6) == 2) then !use DME
+                              correction_2bc_axial_charge = dme_axial()
+                           end if
                            if (op%use_2bc(1) == 0) then !just one body
                               op%mat%elem(ipt) = -dot_product(wf_1(:), dr_wf_2(:))      &
                                   + xl2*dot_product(wf_1(:), y(:)*wf_2(:))
@@ -981,8 +997,10 @@ contains
       real(dp) :: m
 
       m = Mpi/hbarc
-      u22 = 3.0_dp*kf*kf/(8.0_dp*m*m*(4.0_dp*kf*kf+m*m))*(48.0_dp + 20.0_dp*m*m/(kf*kf) &
-            + m*(4.0_dp*kf*kf + m*m)/(kf*kf*kf)*(m/kf*log(m*m/(4.0_dp*kf*kf + m*m)) - 8.0_dp*atan(2*kf/m)))
+      !fixed definition from Dr Engel's DME currents paper.
+      u22 = 1.5_dp / (m*m) * (1.0_dp + 8.0_dp*kf*kf/(4.0_dp*kf*kf+m*m) - m*m/(4.0_dp*kf*kf)*log(1.0_dp + 4.0_dp*kf*kf/(m*m)))
+      !u22 = 3.0_dp*kf*kf/(8.0_dp*m*m*(4.0_dp*kf*kf+m*m))*(48.0_dp + 20.0_dp*m*m/(kf*kf) &
+      !      + m*(4.0_dp*kf*kf + m*m)/(kf*kf*kf)*(m/kf*log(m*m/(4.0_dp*kf*kf + m*m)) - 8.0_dp*atan(2*kf/m)))
 
    end function
 
@@ -1018,7 +1036,8 @@ contains
 
    end function
    
-   function forbidden_2bc_P(kf, P) result(iout) !compute the integral functions of k_F, P, and Mpi.
+   !no reason to have this in a separate function.
+   function forbidden_2bc_P_old(kf, P) result(iout) !compute the integral functions of k_F, P, and Mpi.
       use hfb_solution, only : nghl
       use pnfam_constants, only : hbarc, Mpi
       implicit none
@@ -1033,24 +1052,32 @@ contains
       + 0.25_dp * (((m*m + P*P)**2 + kf*kf * (kf*kf - 2 * P*P + 2*m*m)) * log((m*m + (P + kf)**2)/(m*m + (P - kf)**2)))) &
       + 1.0_dp / (8.0_dp * P**3) * ((-kf*kf*(kf*kf + 4.0_dp*m*m - 2.0_dp*P*P) &
       - (3.0_dp*m**4 + 4.0_dp*m*m*P*P + P**4)) * log((m*m + (P + kf)**2)/(m*m + (P - kf)**2)) + 4.0_dp*kf*P*(kf*kf+3.0_dp*m*m+P*P) )
-
-
    end function
 
-   function forbidden_2bc_exc() result (rf)
+   function forbidden_2bc_P() result (rf)
       use hfb_solution, only : nghl, hfb_density_coord
       use pnfam_constants, only : Mpi, Fpi, Mn, hbarc, gA, pi, IT_ISOSCALAR
       implicit none
       real(dp), dimension(nghl) :: rho, kf, rf, iout
-      real(dp) :: P
-      character(len=200) :: st
+      real(dp) :: P, m
+      !character(len=200) :: st
 		! Constants
       !P = 50.0_dp / hbarc !determine an acceptable value for P. 50 MeV? convert to fm^-1. 
-      P = sqrt(1.2)*1.361 / 2.0 
+      !P = sqrt(1.2)*1.361 / 2.0 
+      P = 0.5477_dp * MAXVAL(kf)
+      m = Mpi/hbarc
 		! DME integrals
       call hfb_density_coord(IT_ISOSCALAR, rho)
       kf = lda_kf_snm(rho) ! 1/fm
-      iout = forbidden_2bc_P(kf, P) 
+      
+      !iout = 0.5_dp / P**3 * (-P * kf * (kf*kf + m*m + P*P) &
+      !+ 0.25_dp * (((m*m + P*P)**2 + kf*kf * (kf*kf - 2 * P*P + 2*m*m)) * log((m*m + (P + kf)**2)/(m*m + (P - kf)**2)))) &
+      !+ 1.0_dp / (8.0_dp * P**3) * ((-kf*kf*(kf*kf + 4.0_dp*m*m - 2.0_dp*P*P) &
+      !- (3.0_dp*m**4 + 4.0_dp*m*m*P*P + P**4)) * log((m*m + (P + kf)**2)/(m*m + (P - kf)**2)) + 4.0_dp*kf*P*(kf*kf+3.0_dp*m*m+P*P) )
+
+      !simplified version.
+      iout = 1.0_dp / (P**3) * (P*M*M*kf - 0.25_dp*M*M*(M*M+P*P+kf*kf)*log((m*m + (P + kf)**2)/(m*m + (P - kf)**2)))
+      !iout = forbidden_2bc_P(kf, P) 
       rf = -gA*gA*hbarc*Mn/ (4*pi*pi*Fpi*Fpi) * iout !Full correction is gA^2 / (4pi^2 Fpi^2).
       !Multiply out 1/correction factor: -Mn / hbarc.Since we would multiply by two factors of hbarc for the Fpi^2 in denominator, 
       !we end up with Mn * hbarc in numerator. don't need to worry about factoring out a gA since the original P operator has no gA.
@@ -1064,21 +1091,20 @@ contains
       implicit none
       real(dp), dimension(nghl) :: rho, kf, rf, iout
       real(dp) :: P, m
-      !character(len=200) :: st
 		! Constants
-      !P = sqrt(1.2)*1.361 / 2.0 !determine an acceptable value for P Try using the Fermi gas mean value? (P^2 = 6/5 kF^2), kf max was 1.361.
-      P = 275.0/hbarc
+      !divide by zero error when using smaller P values..
+      P = 275.0 / hbarc
+      !P = sqrt(1.2)*1.361 / 2.0 !determine an acceptable value for P. Try using the Fermi gas mean value? (P = sqrt(6/5) * kF^2 / 2)
+      !P = 0.5477_dp * MAXVAL(kf)
       m = Mpi / hbarc
 		! DME integrals
       call hfb_density_coord(IT_ISOSCALAR, rho)
       kf = lda_kf_snm(rho) ! 1/fm
 
       iout = 1.0_dp / P**3 * (-P * kf * (kf*kf + m*m + P*P) &
-      + 0.25_dp * (((m*m + P*P)**2 + kf*kf * (kf*kf - 2 * P*P + 2*m*m)) * log((m*m + (P + kf)**2)/(m*m + (P - kf)**2))))
+      + 0.25_dp * (((m*m + P*P)**2 + kf*kf * (kf*kf - 2*P*P + 2*m*m)) * log((m*m + (P + kf)**2)/(m*m + (P - kf)**2))))
       rf = -hbarc*Mn/ (8*pi*pi*Fpi*Fpi) * iout
-      !write(st,'(a11,f16.3,a11, f16.3,a21)') 'max of rf: ', MAXVAL(rf), 'min of rf: ', MINVAL(rf), 'in forbidden 2bc exc.'
-      !call writelog(st)
-      !factor out the gA since the PS0 operator comes with a factor of gA. (See chiral two body currents paper)
+      !factor out the gA since the PS0 ope      !inquire(file="rf_ps0.txt", exist=exists)
       !Reference the dme exc above where gA is factored out of the caux factor.
       !Prefactor here is also -1/Mn, so need to multiply by -Mn. See notes on the signs of the gA, but since this term enhances the one body piece,
       !we can determine the sign accordingly (since iout < 0)
@@ -1097,23 +1123,58 @@ contains
       u11 = 1.5_dp / (kf * kf) * (atan(2.0_dp*kf/m) - 2.0_dp*kf*m/(4.0_dp*kf*kf + m*m))
    end function
 
-   function dme_u1_1(kf) result(u11)
+   !U_-1,1 function. Since this results in a singularity near 0, it includes an additional factor of kf which is from the DME vector expression.
+   function dme_u1_1(kf) result(u1_1)
       use hfb_solution, only : nghl
       use pnfam_constants, only : hbarc, Mpi
       implicit none
       real(dp), dimension(nghl), intent(in) :: kf
-      real(dp), dimension(nghl) :: u11
+      real(dp), dimension(nghl) :: u1_1
+      real(dp) :: m
+      integer :: loopvar
+
+      m = Mpi/hbarc
+      u1_1 = m / (2.0_dp*kf*kf) * (1.0_dp + (2.0_dp*kf/m - 1.5_dp*m/kf)*atan(2.0_dp*kf/m) + m*m/(2.0_dp*kf*kf)*log(1.0_dp + 4.0_dp*kf*kf/(m*m)))
+      !need to manually calc values near 0 since the function displays oscillating behavior there.
+
+      do loopvar=1,nghl  
+         if (kf(loopvar) < 0.001) then !1e-3 is about where the oscillatory behavior begins.
+            u1_1(loopvar) = 2.859
+         endif
+      end do  
+   end function
+
+   !U_2^1 function for vector dme.
+   function dme_u21(kf) result(u21)
+      use hfb_solution, only : nghl
+      use pnfam_constants, only : hbarc, Mpi
+      implicit none
+      real(dp), dimension(nghl), intent(in) :: kf
+      real(dp), dimension(nghl) :: u21
       real(dp) :: m
 
       m = Mpi/hbarc
-      u11 = m / (2.0_dp*kf*kf*kf) * (1.0_dp + (2.0_dp*kf/m - 1.5_dp*m/kf)*atan(2.0_dp*kf/m) + m*m/(2.0_dp*kf*kf)*log(1.0_dp + 4.0_dp*kf*kf/(m*m)))
+      u21 = 1.5_dp / (kf*m) * (1.0_dp + (2.0_dp*kf/m - 0.5_dp*m/kf) * atan(2.0_dp*kf/m))
+   end function
+
+   !U_2^3 function for vector dme.
+   function dme_u23(kf) result(u23)
+      use hfb_solution, only : nghl
+      use pnfam_constants, only : hbarc, Mpi
+      implicit none
+      real(dp), dimension(nghl), intent(in) :: kf
+      real(dp), dimension(nghl) :: u23
+      real(dp) :: m
+
+      m = Mpi/hbarc
+      u23 = 1.5_dp / (m*m) * (3.0_dp*atan(2.0_dp*kf/m) - 2.0_dp * (4.0_dp*m*kf*kf*kf + 3.0_dp*m*m*m*kf)/(4.0_dp*kf*kf + m*m)**2)
    end function
 
    !DME current for the axial charge term.
    function dme_axial() result(rf)
       use hfb_solution, only : nghl
       use hfb_solution, only : hfb_density_coord, d2rho, tau
-      use pnfam_constants, only : Mpi, Mn, Fpi, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON
+      use pnfam_constants, only : Mpi, Mn, Fpi, pi, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON
       implicit none
       real(dp), dimension(nghl) :: rho, kf, u11, u1_1, rf, d2r0, tau0
 
@@ -1127,13 +1188,50 @@ contains
       u11 = dme_u11(kf) ! fm^2
       u1_1 = dme_u1_1(kf) ! fm^2
 
-      ! Full expression - leave out the factor of i?
-      !according to Dr Engel, in nuclear matter, only the first term involving U_1^{-1} is nonzero since the term with tau0 cancels that with 0.6
-      rf = hbarc*Mn/(6.0_dp*Fpi*Fpi) * u1_1 * rho ! ((u1_1 + 0.6_dp*u11)*rho + u11/(kf*kf)*(0.25_dp*d2r0 - tau0))
-      !rf = hbarc*Mn/(6.0_dp*Fpi*Fpi) * ((u1_1 + 0.6_dp*u11)*rho + u11/(kf*kf)*(0.25_dp*d2r0 - tau0))
-      !rf = hbarc*Mn/(6.0_dp*Fpi*Fpi) * (u1_1*rho + u11/(kf*kf)*0.25_dp*d2r0)
+      !adjust for the additional factor of kf included in U_1^-1 calculation.
+      !according to Dr Engel, in constant density nuclear matter, only the first term involving U_1^{-1} is nonzero since the term with tau0 cancels that with 0.6
+      rf = hbarc*Mn/(6.0_dp*Fpi*Fpi) * (u1_1 *(2.0_dp*kf*kf/(3.0_dp*pi*pi)) + 0.6_dp*u11*rho + u11/(kf*kf)*(0.25_dp*d2r0 - tau0))
+   end function
 
+   !DME current for the vector current term.
+   function dme_vector() result(rf)
+      use hfb_solution, only : nghl
+      use hfb_solution, only : hfb_density_coord, d2rho, tau
+      use pnfam_constants, only : Mpi, Mn, Fpi, gA, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON
+      implicit none
+      real(dp), dimension(nghl) :: rho, kf, u11, u1_1, u21, u23, rf, d2r0, tau0
+      real :: m
+      !character(len=200) :: st
+      logical :: exists
+      integer :: loopvar
+      m = Mpi/hbarc
+      ! Densities
+      call hfb_density_coord(IT_ISOSCALAR, rho)
+      d2r0 = d2rho(:,IT_NEUTRON)+d2rho(:,IT_PROTON)
+      tau0 = tau(:,IT_NEUTRON)+tau(:,IT_PROTON)
 
+      ! DME integrals
+      kf = lda_kf_snm(rho) ! 1/fm
+      u11 = dme_u11(kf) ! fm^2
+      u1_1 = dme_u1_1(kf) ! fm^2
+      u21 = dme_u21(kf)
+      u23 = dme_u23(kf)
+
+      !extra factor of kf already included in U_1^-1.
+      rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u1_1 + 0.1_dp*kf*u11 - m*m/(3.0_dp*kf)*u21 - m*m*u23/(30.0_dp*kf))*rho &
+      + (u11 / (6.0_dp*kf) - m*m*u23/(18.0_dp*kf*kf*kf)) * (0.25_dp*d2r0 - tau0))
+      !try writing kf output to a file. check if exists first - only write once
+      !inquire(file="rf_part.txt", exist=exists)
+      !if (exists .eqv. .false.) then
+      !   open(12, file = 'rf_part.txt', status = 'new')
+      !   do loopvar=1,nghl  
+      !      write(12,*) rf(loopvar)
+      !   end do  
+      !   close(12)
+      !endif
+      !write(st,'(a20,f10.5,a20,f10.5,a20)') 'first item in u1_1', u1_1(1), 'first item in kf', kf(1), 'in 2bc dme.'
+      !call writelog(st)
+      ! Full expression - multiply by 1/prefactor = -Mn.
    end function
 end module pnfam_extfield
 
