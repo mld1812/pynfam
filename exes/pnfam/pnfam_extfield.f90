@@ -981,24 +981,71 @@ contains
       implicit none
       real(dp), dimension(nghl), intent(in) :: kf
       real(dp), dimension(nghl) :: u00
-      real(dp) :: m
+      real(dp) :: m, limitAtZero
+      integer :: loopvar
 
       m = Mpi/hbarc
       u00 = 1.5_dp/(kf*kf)*(1 - m/kf*atan(2*kf/m) + m*m/(4.0_dp*kf*kf)*log(1 + 4*kf*kf/(m*m)))
 
+      limitAtZero = 1.0_dp / (m*m) !this function converges to 1/M^2 at zero, but oscillates due to roundoff error around kf = 0.2 MeV.
+      do loopvar=1,nghl  
+         if (kf(loopvar) < 0.001) then
+            u00(loopvar) = limitAtZero
+         endif
+      end do  
    end function
 
-   function dme_u22(kf) result(u22)
+   function dme_u02(kf) result(u02)
       use hfb_solution, only : nghl
       use pnfam_constants, only : hbarc, Mpi
+      implicit none
+      real(dp), dimension(nghl), intent(in) :: kf
+      real(dp), dimension(nghl) :: u02
+      real(dp) :: m
+      integer :: loopvar
+
+      m = Mpi/hbarc
+      u02 = 0.75_dp/(kf*kf)*(log(1.0_dp + 4.0_dp*kf*kf/(m*m)) - 4.0_dp*kf*kf/(4.0_dp*kf*kf+m*m))
+      do loopvar=1,nghl  
+         if (kf(loopvar) < 0.00005) then !0.01 MeV -> 5e-5 fm^-1 is a reasonable cutoff.
+            u02(loopvar) = 0
+         endif
+      end do  
+   end function
+
+   !need a separate function to handle U_0^2/k_F^2. 
+   function dme_u02_kf2(kf) result(u02)
+      use hfb_solution, only : nghl
+      use pnfam_constants, only : hbarc, Mpi
+      implicit none
+      real(dp), dimension(nghl), intent(in) :: kf
+      real(dp), dimension(nghl) :: u02
+      real(dp) :: m, limitAtZero
+      integer :: loopvar
+
+      m = Mpi/hbarc
+      u02 = 0.75_dp/(kf*kf*kf*kf)*(log(1.0_dp + 4.0_dp*kf*kf/(m*m)) - 4.0_dp*kf*kf/(4.0_dp*kf*kf+m*m))
+      limitAtZero = 6.0_dp / (m**4)
+
+      do loopvar=1,nghl  
+         if (kf(loopvar) < 0.001) then !reasonable cutoff, see plot.
+            u02(loopvar) = limitAtZero
+         endif
+      end do  
+   end function
+
+   !U_2^2 function used in vector current. Since it's divided by kF^2 and multiplied by rho, include all the prefactors.
+   function dme_u22(kf) result(u22)
+      use hfb_solution, only : nghl
+      use pnfam_constants, only : hbarc, Mpi, pi
       implicit none
       real(dp), dimension(nghl), intent(in) :: kf
       real(dp), dimension(nghl) :: u22
       real(dp) :: m
 
       m = Mpi/hbarc
-      !fixed definition from Dr Engel's DME currents paper.
-      u22 = 1.5_dp / (m*m) * (1.0_dp + 8.0_dp*kf*kf/(4.0_dp*kf*kf+m*m) - m*m/(4.0_dp*kf*kf)*log(1.0_dp + 4.0_dp*kf*kf/(m*m)))
+      !fixed definition from Dr Engel's DME currents paper. No oscillation
+      u22 = -1.0_dp * kf / (3.0_dp*pi*pi) * (1.0_dp + 8.0_dp*kf*kf/(4.0_dp*kf*kf+m*m) - m*m/(4.0_dp*kf*kf)*log(1.0_dp + 4.0_dp*kf*kf/(m*m)))
       !u22 = 3.0_dp*kf*kf/(8.0_dp*m*m*(4.0_dp*kf*kf+m*m))*(48.0_dp + 20.0_dp*m*m/(kf*kf) &
       !      + m*(4.0_dp*kf*kf + m*m)/(kf*kf*kf)*(m/kf*log(m*m/(4.0_dp*kf*kf + m*m)) - 8.0_dp*atan(2*kf/m)))
 
@@ -1010,7 +1057,7 @@ contains
       use type_extfield_2bc, only : caux, d1,d2,c3,c4
       use pnfam_constants, only : Mpi, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON
       implicit none
-      real(dp), dimension(nghl) :: rho, kf, u22, u00, rf1, rf2, rf, d2r0, tau0
+      real(dp), dimension(nghl) :: rho, kf, u02, u00, u02_kf2, rf1, rf2, rf, d2r0, tau0
       real(dp) :: m, ca, ch, cc
 
       ! Constants
@@ -1027,11 +1074,13 @@ contains
       ! DME integrals
       kf = lda_kf_snm(rho) ! 1/fm
       u00 = dme_u00(kf) ! fm^2
-      u22 = dme_u22(kf) ! fm^2
+      u02 = dme_u02(kf) ! fm^2
+      u02_kf2 = dme_u02_kf2(kf)
 
       ! Full expression
-      rf1 = ca*(ch*(1 - m*m*u00 - m*m*u22*0.1_dp) + cc)*rho
-      rf2 = ca*ch*m*m/(6*kf*kf)*u22*(0.25_dp*d2r0 - tau0)
+      rf1 = ca*(ch*(1 - m*m*u00 - m*m*u02*0.1_dp) + cc)*rho
+      rf2 = ca*ch*m*m/(6)*u02_kf2*(0.25_dp*d2r0 - tau0)
+      !rf2 = ca*ch*m*m/(6*kf*kf)*u02*(0.25_dp*d2r0 - tau0)
       rf = rf1 - rf2
 
    end function
@@ -1063,8 +1112,8 @@ contains
       !character(len=200) :: st
 		! Constants
       !P = 50.0_dp / hbarc !determine an acceptable value for P. 50 MeV? convert to fm^-1. 
-      !P = sqrt(1.2)*1.361 / 2.0 
-      P = 0.5477_dp * MAXVAL(kf)
+      P = sqrt(1.2)*1.361 / 2.0 
+      !P = 0.5477_dp * MAXVAL(kf)
       m = Mpi/hbarc
 		! DME integrals
       call hfb_density_coord(IT_ISOSCALAR, rho)
@@ -1110,7 +1159,7 @@ contains
       !we can determine the sign accordingly (since iout < 0)
    end function
 
-   !U_11 and U_-1,1 functions in dme current.
+   !U_11 functions in dme current.
    function dme_u11(kf) result(u11)
       use hfb_solution, only : nghl
       use pnfam_constants, only : hbarc, Mpi
@@ -1123,7 +1172,47 @@ contains
       u11 = 1.5_dp / (kf * kf) * (atan(2.0_dp*kf/m) - 2.0_dp*kf*m/(4.0_dp*kf*kf + m*m))
    end function
 
-   !U_-1,1 function. Since this results in a singularity near 0, it includes an additional factor of kf which is from the DME vector expression.
+   !separate function for U_11/kF^2
+   function dme_u11_kf2(kf) result(u11)
+      use hfb_solution, only : nghl
+      use pnfam_constants, only : hbarc, Mpi
+      implicit none
+      real(dp), dimension(nghl), intent(in) :: kf
+      real(dp), dimension(nghl) :: u11
+      real(dp) :: m
+      integer :: loopvar
+
+      m = Mpi/hbarc
+      u11 = 1.5_dp / (kf*kf*kf*kf) * (atan(2.0_dp*kf/m) - 2.0_dp*kf*m/(4.0_dp*kf*kf + m*m))
+      do loopvar=1,nghl  
+         if (kf(loopvar) < 0.001) then !reasonable cutoff.
+            u11(loopvar) = 8.0_dp/(m*m*m*kf(loopvar)) !approximation near zero.
+         endif
+      end do  
+
+   end function
+
+   !U_1^0 function. 
+   function dme_u10(kf) result(u10)
+      use hfb_solution, only : nghl
+      use pnfam_constants, only : hbarc, Mpi
+      implicit none
+      real(dp), dimension(nghl), intent(in) :: kf
+      real(dp), dimension(nghl) :: u10
+      real(dp) :: m, limitAtZero
+      integer :: loopvar
+
+      m = Mpi/hbarc
+      u10 = 1.5_dp / (kf * kf) * (1.0_dp - m*m/(4.0_dp*kf*kf)*log(1.0_dp+4.0_dp*kf*kf/(m*m)))
+      limitAtZero = 3.0_dp / (m*m)
+      do loopvar=1,nghl  
+         if (kf(loopvar) < 0.001) then !reasonable cutoff.
+            u10(loopvar) = limitAtZero !approximation near zero.
+         endif
+      end do  
+   end function
+
+   !U_1,-1 function. Since this results in a singularity near 0, it includes an additional factor of kf^3 from multiplying by rho in the axial charge DME>
    function dme_u1_1(kf) result(u1_1)
       use hfb_solution, only : nghl
       use pnfam_constants, only : hbarc, Mpi
@@ -1134,12 +1223,48 @@ contains
       integer :: loopvar
 
       m = Mpi/hbarc
-      u1_1 = m / (2.0_dp*kf*kf) * (1.0_dp + (2.0_dp*kf/m - 1.5_dp*m/kf)*atan(2.0_dp*kf/m) + m*m/(2.0_dp*kf*kf)*log(1.0_dp + 4.0_dp*kf*kf/(m*m)))
-      !need to manually calc values near 0 since the function displays oscillating behavior there.
-
+      u1_1 = m / (2.0_dp) * (1.0_dp + (2.0_dp*kf/m - 1.5_dp*m/kf)*atan(2.0_dp*kf/m) + m*m/(2.0_dp*kf*kf)*log(1.0_dp + 4.0_dp*kf*kf/(m*m)))
       do loopvar=1,nghl  
-         if (kf(loopvar) < 0.001) then !1e-3 is about where the oscillatory behavior begins.
-            u1_1(loopvar) = 2.859
+         if (kf(loopvar) < 0.0001) then !good cutoff to set to 0.
+            u1_1(loopvar) = 0
+         endif
+      end do  
+   end function
+
+   !U_1^2 function for vector dme.
+   function dme_u12(kf) result(u12)
+      use hfb_solution, only : nghl
+      use pnfam_constants, only : hbarc, Mpi
+      implicit none
+      real(dp), dimension(nghl), intent(in) :: kf
+      real(dp), dimension(nghl) :: u12
+      real(dp) :: m
+      integer :: loopvar
+      m = Mpi/hbarc
+      u12 = 3.0_dp / (4.0_dp*kf*kf+m*m) * ((4.0_dp*kf*kf-m*m)/(4.0_dp*kf*kf+m*m) + (1.0_dp + m*m/(4.0_dp*kf*kf))*log(1.0_dp+4.0_dp*kf*kf/(m*m)))
+      do loopvar=1,nghl  
+         if (kf(loopvar) < 0.0001) then !reasonable cutoff.
+            u12(loopvar) = 0 !approximation near zero.
+         endif
+      end do  
+   end function
+
+   !need a separate function to handle U_1^2/k_F^2. 
+   function dme_u12_kf2(kf) result(u12)
+      use hfb_solution, only : nghl
+      use pnfam_constants, only : hbarc, Mpi
+      implicit none
+      real(dp), dimension(nghl), intent(in) :: kf
+      real(dp), dimension(nghl) :: u12
+      real(dp) :: m, c1, c2
+      integer :: loopvar
+      m = Mpi/hbarc
+      u12 = 3.0_dp / (kf*kf*(4.0_dp*kf*kf+m*m)) * ((4.0_dp*kf*kf-m*m)/(4.0_dp*kf*kf+m*m) + (1.0_dp + m*m/(4.0_dp*kf*kf))*log(1.0_dp+4.0_dp*kf*kf/(m*m)))
+      c1 = 30.0_dp / (m**4)
+      c2 = -224.0_dp / (m**6)
+      do loopvar=1,nghl  
+         if (kf(loopvar) < 0.001) then !reasonable cutoff.
+            u12(loopvar) = c1 + c2 * kf(loopvar)**2 !use Taylor series approx: u12 = c1 + c2 * kf^2
          endif
       end do  
    end function
@@ -1170,13 +1295,46 @@ contains
       u23 = 1.5_dp / (m*m) * (3.0_dp*atan(2.0_dp*kf/m) - 2.0_dp * (4.0_dp*m*kf*kf*kf + 3.0_dp*m*m*m*kf)/(4.0_dp*kf*kf + m*m)**2)
    end function
 
+   !U_2^4 function for vector dme. Includes additional factors from vector current definition.
+   function dme_u24(kf) result(u24)
+      use hfb_solution, only : nghl
+      use pnfam_constants, only : hbarc, Mpi
+      implicit none
+      real(dp), dimension(nghl), intent(in) :: kf
+      real(dp), dimension(nghl) :: u24
+      real(dp) :: m
+      m = Mpi / hbarc
+      u24 = kf*kf*(80.0_dp*kf**4 + 40.0_dp*kf*kf*m*m - 3.0_dp*m**4)/(4.0_dp*kf*kf+m*m)**3 + 0.75_dp*log(1.0_dp+4.0_dp*kf*kf/(m*m))
+
+   end function
+
+   !U_2^4 function divided by kf^4. Use taylor series expansion near kf=0. Includes factors from vector DME expression.
+   function dme_u24_kf4(kf) result(u24)
+      use hfb_solution, only : nghl
+      use pnfam_constants, only : hbarc, Mpi
+      implicit none
+      real(dp), dimension(nghl), intent(in) :: kf
+      real(dp), dimension(nghl) :: u24
+      real(dp) :: m, c1, c2
+      integer :: loopvar
+      m = Mpi / hbarc
+      u24 = 1.0_dp / (24.0_dp *kf*kf*kf*kf) * (kf*kf*(80.0_dp*kf**4 + 40.0_dp*kf*kf*m*m - 3.0_dp*m**4)/(4.0_dp*kf*kf+m*m)**3 + 0.75_dp*log(1.0_dp+4.0_dp*kf*kf/(m*m)))
+      c1 = 35.0_dp / (12.0_dp * m**4)
+      c2 = -28.0_dp / (m**6) !Taylor expansion of U_2^4 / kf**4: c1 + c2 kf^2.
+      do loopvar=1,nghl  
+         if (kf(loopvar) < 0.001) then !reasonable cutoff.
+            u24(loopvar) = c1 + c2*kf(loopvar)**2 !use Taylor series approximation
+         endif
+      end do 
+   end function
+
    !DME current for the axial charge term.
    function dme_axial() result(rf)
       use hfb_solution, only : nghl
       use hfb_solution, only : hfb_density_coord, d2rho, tau
       use pnfam_constants, only : Mpi, Mn, Fpi, pi, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON
       implicit none
-      real(dp), dimension(nghl) :: rho, kf, u11, u1_1, rf, d2r0, tau0
+      real(dp), dimension(nghl) :: rho, kf, u11, u11_kf2, u1_1, rf, d2r0, tau0
 
       ! Densities
       call hfb_density_coord(IT_ISOSCALAR, rho)
@@ -1186,22 +1344,23 @@ contains
       ! DME integrals
       kf = lda_kf_snm(rho) ! 1/fm
       u11 = dme_u11(kf) ! fm^2
+      u11_kf2 = dme_u11_kf2(kf)
       u1_1 = dme_u1_1(kf) ! fm^2
 
       !adjust for the additional factor of kf included in U_1^-1 calculation.
       !according to Dr Engel, in constant density nuclear matter, only the first term involving U_1^{-1} is nonzero since the term with tau0 cancels that with 0.6
-      rf = hbarc*Mn/(6.0_dp*Fpi*Fpi) * (u1_1 *(2.0_dp*kf*kf/(3.0_dp*pi*pi)) + 0.6_dp*u11*rho + u11/(kf*kf)*(0.25_dp*d2r0 - tau0))
+      rf = hbarc*Mn/(6.0_dp*Fpi*Fpi) * (u1_1 *(2.0_dp/(3.0_dp*pi*pi)) + 0.6_dp*u11*rho + u11_kf2*(0.25_dp*d2r0 - tau0))
    end function
 
    !DME current for the vector current term.
    function dme_vector() result(rf)
       use hfb_solution, only : nghl
       use hfb_solution, only : hfb_density_coord, d2rho, tau
-      use pnfam_constants, only : Mpi, Mn, Fpi, gA, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON
+      use pnfam_constants, only : Mpi, Mn, Fpi, gA, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON, pi
       implicit none
-      real(dp), dimension(nghl) :: rho, kf, u11, u1_1, u21, u23, rf, d2r0, tau0
-      real :: m
-      !character(len=200) :: st
+      real(dp), dimension(nghl) :: rho, kf, u10, u12, u12_kf2, u22, u24, u24_kf4, rf, d2r0, tau0
+      real(dp) :: m
+      character(len=200) :: st
       logical :: exists
       integer :: loopvar
       m = Mpi/hbarc
@@ -1210,26 +1369,36 @@ contains
       d2r0 = d2rho(:,IT_NEUTRON)+d2rho(:,IT_PROTON)
       tau0 = tau(:,IT_NEUTRON)+tau(:,IT_PROTON)
 
+      rf = 0
+      !test out if the integrals are the problem.
+      !write(st,'(a15)') 'first item ine.'
+      !call writelog(st)
       ! DME integrals
       kf = lda_kf_snm(rho) ! 1/fm
-      u11 = dme_u11(kf) ! fm^2
-      u1_1 = dme_u1_1(kf) ! fm^2
-      u21 = dme_u21(kf)
-      u23 = dme_u23(kf)
+      u10 = dme_u10(kf)
+      u12 = dme_u12(kf)
+      u22 = dme_u22(kf)
+      u24 = dme_u24(kf)
+      u12_kf2 = dme_u12_kf2(kf)
+      u24_kf4 = dme_u24_kf4(kf)
 
       !extra factor of kf already included in U_1^-1.
-      rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u1_1 + 0.1_dp*kf*u11 - m*m/(3.0_dp*kf)*u21 - m*m*u23/(30.0_dp*kf))*rho &
-      + (u11 / (6.0_dp*kf) - m*m*u23/(18.0_dp*kf*kf*kf)) * (0.25_dp*d2r0 - tau0))
+      !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u10 + 0.1_dp*u12 - m*m*u24/(30.0_dp*kf*kf))*rho + u22 &
+      
+      !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u10 + 0.1_dp*u12)*rho + u22 - u24*kf/(60.0_dp*pi*pi))
+      !rf =  (0.25_dp*d2r0 - tau0)
+      rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u10 + 0.1_dp*u12)*rho + u22 - u24*kf/(60.0_dp*pi*pi)&
+      + (u12_kf2/6.0_dp - u24_kf4) * (0.25_dp*d2r0 - tau0))
       !try writing kf output to a file. check if exists first - only write once
-      !inquire(file="rf_part.txt", exist=exists)
+      !inquire(file="rf_d2r0_tau0.txt", exist=exists)
       !if (exists .eqv. .false.) then
-      !   open(12, file = 'rf_part.txt', status = 'new')
+      !   open(12, file = 'rf_d2r0_tau0.txt', status = 'new')
       !   do loopvar=1,nghl  
       !      write(12,*) rf(loopvar)
       !   end do  
       !   close(12)
       !endif
-      !write(st,'(a20,f10.5,a20,f10.5,a20)') 'first item in u1_1', u1_1(1), 'first item in kf', kf(1), 'in 2bc dme.'
+      !write(st,'(a20,f10.5,a20,f10.5,a20)') 'first item in u10', u10(1), 'first item in kf', kf(1), 'in dme.'
       !call writelog(st)
       ! Full expression - multiply by 1/prefactor = -Mn.
    end function

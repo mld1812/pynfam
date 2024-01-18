@@ -1,0 +1,122 @@
+#
+# ===================================================
+#                       pnFAM
+#      Charge-changing Finite Amplitude Method
+#                   Version: 2.00
+#          Compiled with OpenMP (threads=6)
+#
+#       Commit: 481d90f [2022-01-21] + updates
+#            Run date: 1/16/2024 23:23:57
+# ===================================================
+#               Operator: P- for K = 0
+#           Energy: (  0.0000 +   0.1000i)
+#        Parent nucleus:   40S  (N=24, Z=16)
+#        Daughter nucleus: 40Cl (N=23, Z=17)
+# ===================================================
+#
+# ---------------------------------------------------
+#               pnFAM solver details
+# ---------------------------------------------------
+# FAM input parameter file name:   'P-K0.in'
+# FAM output file name base:       'P-K0'
+#
+# Operator:                        P-  K= 0
+# Two-body current mode (use_p):   111020 (0)
+#   LECs (c3, c4, cd):              -3.1962  +3.1962  +0.0000
+# Compute cross-terms:             Yes
+#   Cross-terms computed:          PxR, PxRS1, PxP
+# Re(EQRPA):                         0.0000 MeV
+# Im(EQRPA):                         0.1000 MeV
+#
+# Number shells:                   6
+# Basis size:                      168
+# Number matrix blocks:            26
+# Non-trivial HFB matrix elements: 1640
+# Non-trivial FAM matrix elements: 1552
+#
+# Maximum iterations:              2
+# Broyden history size:            50
+# Broyden mixing factor:           0.70
+# Convergence limit:                1.0E-07
+#
+# ---------------------------------------------------
+#                 pnFAM Interaction
+# ---------------------------------------------------
+# [!] Self-consistency is enforced
+# [!] Gauge invariance is enforced
+# [!] Coupling constant Cs0 has been overridden manually
+# [!] Coupling constant Csr has been overridden manually
+# [!] Coupling constant Cds has been overridden manually
+#
+# SkO' functional
+# ---------------------------------------------------
+# Time Even PH (t=1):          Time Odd PH (t=1):
+# Crho[0] =   246.942585311;   Cs[0]   =   128.279000000
+# Crho[r] =  -198.724045856;   Cs[r]   =     0.000000000
+# (sigma) =     0.250000000;   (sigma) =     0.250000000
+# Cdr     =   -32.162034342;   Cds     =     0.000000000
+# Ctau    =    -4.156239521;   Cj      =     4.156239521
+# CrdJ    =    41.444400000;   Csdj    =    41.444400000
+# CtJ0    =     3.057291667;   Cgs     =    -0.000000000
+# CtJ1    =     4.585937500;   CT      =    -9.171875000
+# CtJ2    =     9.171875000;   CF      =     0.000000000
+#
+# Pairing (t=1):               Pairing (t=0):
+# Cpr[0]  =   -33.027032645;   Cps[0]  =   -43.294000000
+# Cpr[r]  =   103.100736927;   Cps[r]  =   135.151206361;   (sigma) =  1.000000000
+#
+# Coupling constants in natural units
+# ---------------------------------------------------
+# Crho[0] =     0.278086965;   Cs[0]   =     0.144457537
+# Crho[r] =    -0.210865598;   Cs[r]   =     0.000000000
+# Cdr     =    -0.455900493;   Cds     =     0.000000000
+# Ctau    =    -0.058915168;   Cj      =     0.058915168
+# CrdJ    =     0.587479082;   Csdj    =     0.587479082
+# CtJ0    =     0.043337457;   Cgs     =    -0.000000000
+# CtJ1    =     0.065006185;   CT      =    -0.130012371
+# CtJ2    =     0.130012371;   CF      =     0.000000000
+# Fpi     =    93.000000000;   Lambda  =   700.000000000
+#
+# Approximate Landau Parameters
+# ---------------------------------------------------
+# rho_00  =     0.160168752;   k_F     =     1.333489494
+# m*/m    =     0.896164956;   N0^(-1) =   171.252661775
+# g0'     =     1.307654125;   g1'     =     0.190471494
+# h0'     =     0.000000000;   hbzero  =    20.735530000
+#
+# ---------------------------------------------------
+#             Statistical pnFAM details
+# ---------------------------------------------------
+# Finite-temperature active: No
+# Odd-nucleus EFA active ..: No
+#
+# ------------------------------------------------------------------------
+#     i               si               Re(S)               Im(S)      Time
+# ------------------------------------------------------------------------
+#    0N     1.0000000000        0.0000000000        0.0000000000     0.000
+#          PxR  Re(X)=      0.00000000  Im(X)=      0.00000000
+#        PxRS1  Re(X)=      0.00000000  Im(X)=      0.00000000
+#          PxP  Re(X)=      0.00000000  Im(X)=      0.00000000
+#    1L     0.0574903162        0.0764316950       -0.0003456585     0.070
+#          PxR  Re(X)=      0.01356661  Im(X)=      0.00297209
+#        PxRS1  Re(X)=      0.06338279  Im(X)=     -0.00081084
+#          PxP  Re(X)=      0.07643170  Im(X)=     -0.00034566
+#    2B     0.0188948096        0.0982024066       -0.0004782812     0.045
+#          PxR  Re(X)=      0.01597640  Im(X)=      0.00126568
+#        PxRS1  Re(X)=      0.06218966  Im(X)=     -0.00053693
+#          PxP  Re(X)=      0.09820241  Im(X)=     -0.00047828
+# ------------------------------------------------------------------------
+#  *  FAM iteration interrupted after    2 steps.  si =  1.88948E-02
+# ------------------------------------------------------------------------
+# Total CPU time =    1.918E-03 minutes
+#
+#
+# Result (Energy [MeV], strength and cross-terms [MeV^-1]):
+# ------------------------------------------------------------------------------
+                                          Real                              Imag
+  Energy             0.0000000000000000000E+00         1.0000000000000000555E-01
+  Strength           9.8202406593509539157E-02        -4.7828124672557930860E-04
+  PxR                1.5976398036336859898E-02         1.2656791919935916207E-03
+  PxRS1              6.2189659681445547124E-02        -5.3693295905313177981E-04
+  PxP                9.8202406593509539157E-02        -4.7828124672557930860E-04
+ 

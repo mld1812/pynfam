@@ -1,0 +1,32 @@
+# Nuclear Beta Decay Rates and Half-Lives
+# PynFAM code version: 2.0.0
+# Run Date: 2024-01-11 15:07
+# Summary Data:
+#   FAM_ctr     = CIRCLE on (0.00e+00, 1.05e+01)      , temper      = 0.00000   
+#   beta_type   = -         , quadratr    = GAUSS     , Half_Width  = N/A       , screening   = N/A       
+#   psi_approx  = RATINT    , psi_glpts   = 15        , ratint_pts  = 20        
+#   Zi          = 16        , A           = 40        , Zf          = 17        , HFB_Qval    = 7.70087   
+#   FAM_Qval    = N/A       , EQRPAmax    = 10.47604  , E_1stPeak   = N/A       , |gA|/gV     = 1.27000   
+#   gA          = -1.27000  , gV          = 1.00000   , M_nucleon   = 939.00000 , alpha*Z     = 0.12405   
+#   Radius      = 0.01063   , alpha*Z/2R  = 5.83646   , W0_max      = 16.07022  , W0*R        = 0.18096   
+#
+                                     Rate(s^-1)              Half-Life(s)
+Total                    8.5493572319668712e-02    8.1075940769933101e+00
+Total-Allowed            8.5493572319668712e-02    8.1075940769933101e+00
+Total-GT                 8.5493572319668712e-02    8.1075940769933101e+00
+Total-Forbidden          0.0000000000000000e+00                       inf
+Allowed-Fermi            0.0000000000000000e+00                       inf
+Allowed-GT_K=0           2.8497569206470449e-02    2.4323028239284508e+01
+Allowed-GT_K=1           5.6996003113198267e-02    1.2161329614346885e+01
+Forbidden-K=0            0.0000000000000000e+00                       inf
+Forbidden-K=1            0.0000000000000000e+00                       inf
+Forbidden-K=2            0.0000000000000000e+00                       inf
+Forbidden-J=0            0.0000000000000000e+00                       inf
+Forbidden-J=1            0.0000000000000000e+00                       inf
+Forbidden-J=2            0.0000000000000000e+00                       inf
+Forbidden-(J,K)=(0,0)    0.0000000000000000e+00                       inf
+Forbidden-(J,K)=(1,0)    0.0000000000000000e+00                       inf
+Forbidden-(J,K)=(1,1)    0.0000000000000000e+00                       inf
+Forbidden-(J,K)=(2,0)    0.0000000000000000e+00                       inf
+Forbidden-(J,K)=(2,1)    0.0000000000000000e+00                       inf
+Forbidden-(J,K)=(2,2)    0.0000000000000000e+00                       inf
