@@ -7,8 +7,8 @@ COMPILE_DIR = $(shell pwd)
 #   - COMPILER .............: type of compiler: GFORTRAN, IFORT, CRAY or IBM; used to automatically set compiler options
 #   - FORTRAN_MPI ..........: actual name of the Fortran compiler. Standard choices are gfortran, mpif90, ifort, xlf2008_r, etc.
 COMPUTER    = DESKTOP
-COMPILER    = GFORTRAN
-FORTRAN_MPI = gfortran
+COMPILER    = IFORT
+FORTRAN_MPI = ifort
 # Build options (TRUE or FALSE)
 #   - VERBOSE ..............: 0: short display; 1: full command displayed
 #   - DEBUG ................: activates debugging options for each compiler

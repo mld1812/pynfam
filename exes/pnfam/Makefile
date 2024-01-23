@@ -34,12 +34,12 @@ COMPILE_DIR = $(shell pwd)
 #==============================================================================#
 #                           Compile-Time Options                               #
 #==============================================================================#
-COMPILER_TYPE = GFORTRAN
-COMPILER = gfortran
+COMPILER_TYPE = IFORT
+COMPILER = ifort
 
 VERBOSE   = 0
 DEBUG     = FALSE
-USE_OPENMP= 1
+USE_OPENMP= 0
 # Turn above on with two-body currents
 
 USE_HBLAS = 1
