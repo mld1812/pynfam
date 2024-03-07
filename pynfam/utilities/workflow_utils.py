@@ -262,8 +262,8 @@ def pynfam_init(pynfam_inputs, override_settings):
             # Dripline mode doesn't make sense in this case
             if dripline:
                 err.append(u"Cannot rerun with rerun_mode!=0 and dripline active.")
-        elif rerun == 2:
-            err.append(u"Cannot rerun with rerun_mode==2 from scratch.")
+        #elif rerun == 2:
+        #    err.append(u"Cannot rerun with rerun_mode==2 from scratch.")
 
     return err, warn, nr_calcs, do_fam, exst_data
 

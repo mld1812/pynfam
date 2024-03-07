@@ -114,7 +114,7 @@ contains
       use hfb_solution, only : nl, ns, nghl, wf, wfdr, wfdz, y, z
       use hfb_solution, only : hfb_density_coord, nr, nz, npar
       use type_extfield_2bc, only : caux, cd, init_extfield_2bc_type
-      use pnfam_constants, only : IT_NEUTRON, IT_PROTON, hbarc, Mn
+      use pnfam_constants, only : IT_NEUTRON, IT_PROTON
       ! DME Direct
       !use type_extfield_2bc, only : c3
       !use pnfam_constants, only : Mpi, hbarc
@@ -132,7 +132,7 @@ contains
       integer :: xl1, xl2, xs1, xs2
       real(dp), dimension(nghl) :: wf_1, wf_2, dr_wf_2, dz_wf_2, dr_wf_1, dz_wf_1, r
       real(dp), dimension(nghl) :: rho_fac, rhon, rhop
-      real(dp), dimension(nghl) :: correction_2bc_vector, correction_2bc_axial_charge
+      real(dp), dimension(nghl) :: correction_2bc_vector, correction_2bc_axial_charge, correction_2bc_rsL
       ! DME Direct
       !real(dp), dimension(nghl) :: d2z_wf_1, d2r_wf_1, drz_wf_1
       !real(dp), dimension(nghl) :: d2z_wf_2, d2r_wf_2, drz_wf_2
@@ -179,7 +179,10 @@ contains
             rho_fac = rho_fac + dme_exc()
          end if
       end if
-
+      ! 3/7/24 Need to call init_extfield_2bc_type to initialize those variables when label = rsL and two body current mode is active
+      if (op%use_2bc(4) /= 0 .and. (label == 'RS0' .or. label == 'RS1' .or. label == 'RS2')) then
+         call init_extfield_2bc_type(.false.)
+      end if
       ! Loop over the FAM block structure to do the calculation
       ipt = 0; op%mat%elem(:) = 0
       do ibx1 = 1, nb
@@ -360,11 +363,26 @@ contains
                   ! ------------------------------
                   case ('RS0')
                      if ((xl1 == xl2) .and. (xs1 == xs2)) then
-                        op%mat%elem(ipt) = -xs1*dot_product(wf_1(:), z(:)*wf_2(:))
+                        if (op%use_2bc(4) == 1) then 
+                           correction_2bc_rsL = forbidden_2bc_rsL()
+                           op%mat%elem(ipt) = -xs1*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), z(:)*wf_2(:))
+                        else
+                           op%mat%elem(ipt) = -xs1*dot_product(wf_1(:), z(:)*wf_2(:))
+                        end if
                      else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
-                        op%mat%elem(ipt) = -dot_product(wf_1(:), r(:)*wf_2(:))
+                        if (op%use_2bc(4) == 1) then 
+                           correction_2bc_rsL = forbidden_2bc_rsL()
+                           op%mat%elem(ipt) = -dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
+                        else
+                           op%mat%elem(ipt) = -dot_product(wf_1(:), r(:)*wf_2(:))
+                        end if
                      else if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
-                        op%mat%elem(ipt) = -dot_product(wf_1(:), r(:)*wf_2(:))
+                        if (op%use_2bc(4) == 1) then 
+                           correction_2bc_rsL = forbidden_2bc_rsL()
+                           op%mat%elem(ipt) = -dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
+                        else
+                           op%mat%elem(ipt) = -dot_product(wf_1(:), r(:)*wf_2(:))
+                        end if
                      end if
 
 
@@ -374,15 +392,35 @@ contains
                      select case (K)
                         case (0)
                            if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
-                              op%mat%elem(ipt) = sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:),r(:)*wf_2(:))
+                              if (op%use_2bc(4) == 1) then
+                                 correction_2bc_rsL = forbidden_2bc_rsL()
+                                 op%mat%elem(ipt) = sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
+                              else
+                                 op%mat%elem(ipt) = sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:),r(:)*wf_2(:))
+                              end if
                            else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
-                              op%mat%elem(ipt) = -sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:),r(:)*wf_2(:))
+                              if (op%use_2bc(4) == 1) then
+                                 correction_2bc_rsL = forbidden_2bc_rsL()
+                                 op%mat%elem(ipt) = -sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:)* (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
+                              else
+                                 op%mat%elem(ipt) = -sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:),r(:)*wf_2(:))
+                              end if 
                            end if
                         case (1,-1)
                            if ((xl1 == xl2) .and. (xs1 == xs2 + 2*K)) then
-                              op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:), z(:)*wf_2(:))
+                              if (op%use_2bc(4) == 1) then
+                                 correction_2bc_rsL = forbidden_2bc_rsL()
+                                 op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:)* (1.0_dp - correction_2bc_rsL),z(:)*wf_2(:))
+                              else
+                                 op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:), z(:)*wf_2(:))
+                              end if
                            else if ((xl1 == xl2 + K) .and. (xs1 == xs2)) then
-                              op%mat%elem(ipt) = -xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:), r(:)*wf_2(:))
+                              if (op%use_2bc(4) == 1) then
+                                 correction_2bc_rsL = forbidden_2bc_rsL()
+                                 op%mat%elem(ipt) = -xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:)* (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
+                              else
+                                 op%mat%elem(ipt) = -xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:), r(:)*wf_2(:))
+                              end if
                            end if
                      end select
 
@@ -393,21 +431,51 @@ contains
                      select case (K)
                         case (0)
                            if ((xl1 == xl2) .and. (xs1 == xs2)) then
-                              op%mat%elem(ipt) = xs1*sqrt(2.0_dp)*dot_product(wf_1(:), z(:)*wf_2(:))
+                              if (op%use_2bc(4) == 1) then
+                                 correction_2bc_rsL = forbidden_2bc_rsL()
+                                 op%mat%elem(ipt) = xs1*sqrt(2.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), z(:)*wf_2(:))
+                              else
+                                 op%mat%elem(ipt) = xs1*sqrt(2.0_dp)*dot_product(wf_1(:), z(:)*wf_2(:))
+                              end if 
                            else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
-                              op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:), r(:)*wf_2(:))
+                              if (op%use_2bc(4) == 1) then
+                                 correction_2bc_rsL = forbidden_2bc_rsL()
+                                 op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
+                              else
+                                 op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:), r(:)*wf_2(:))
+                              end if 
                            else if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
-                              op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:), r(:)*wf_2(:))
+                              if (op%use_2bc(4) == 1) then
+                                 correction_2bc_rsL = forbidden_2bc_rsL()
+                                 op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
+                              else
+                                 op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:), r(:)*wf_2(:))
+                              end if
                            end if
                         case (1,-1)
                            if ((xl1 == xl2) .and. (xs1 == xs2 + 2*K)) then
-                              op%mat%elem(ipt) = -K*sqrt(3.0_dp)*dot_product(wf_1(:), z(:)*wf_2(:))
+                              if (op%use_2bc(4) == 1) then
+                                 correction_2bc_rsL = forbidden_2bc_rsL()
+                                 op%mat%elem(ipt) = -K*sqrt(3.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), z(:)*wf_2(:))
+                              else
+                                 op%mat%elem(ipt) = -K*sqrt(3.0_dp)*dot_product(wf_1(:), z(:)*wf_2(:))
+                              end if
                            else if ((xl1 == xl2 + K) .and. (xs1 == xs2)) then
-                              op%mat%elem(ipt) = -K*xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:), r(:)*wf_2(:))
+                              if (op%use_2bc(4) == 1) then
+                                 correction_2bc_rsL = forbidden_2bc_rsL()
+                                 op%mat%elem(ipt) = -K*xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
+                              else
+                                 op%mat%elem(ipt) = -K*xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:), r(:)*wf_2(:))
+                              end if
                            end if
                         case (2,-2)
                            if ((xl1 == xl2 + K/2) .and. (xs1 == xs2 + K)) then
-                              op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:), r(:)*wf_2(:))
+                              if (op%use_2bc(4) == 1) then
+                                 correction_2bc_rsL = forbidden_2bc_rsL()
+                                 op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
+                              else
+                                 op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:), r(:)*wf_2(:))
+                              end if 
                            end if
                      end select
 
@@ -450,7 +518,7 @@ contains
                            else if (op%use_2bc(6) == 2) then !use DME
                               correction_2bc_axial_charge = dme_axial()
                            end if
-                           if (op%use_2bc(1) == 0) then !just one body
+                           if (op%use_2bc(1) == 0 .or. op%use_2bc(6) == 0) then !just one body
                               op%mat%elem(ipt) = -dot_product(wf_1(:), dr_wf_2(:))      &
                                   + xl2*dot_product(wf_1(:), y(:)*wf_2(:))
                            else if (op%use_2bc(1) == 1) then !1bc + 2bc
@@ -975,6 +1043,49 @@ contains
 
    end function
 
+   !tbc_nmlda_I0 function from above, but takes in/returns a full vector of size nghl.
+   function tbc_nmlda_I0_vec(kf) result(I0)
+      use pnfam_constants, only : pi, Mpi, hbarc
+      use hfb_solution, only : nghl
+      implicit none
+      real(dp), dimension(nghl), intent(in) :: kf
+      real(dp), dimension(nghl) :: kf3, kf2, I0
+      real(dp) :: m
+
+      m = Mpi/hbarc
+      kf2 = kf*kf
+      kf3 = kf*kf*kf
+
+      I0 = 1.0_dp - 3.0_dp*m*m/(kf2) + 3.0_dp*m*m*m/(kf3)*atan(kf/m)
+   end function
+
+   !3/5/24: 2 body correction term for the rsL operators (expansion of e^-iqr term with two-body Gamow-Teller term).
+   !See arXiv:1403.7860v1 "Chiral Two-Body Currents and Neutrinoless Double-Beta Decay" eq 7, "Large-scale nuclear structure calculations for spin-dependent WIMP scattering" eq 14
+   function forbidden_2bc_rsL() result (iout)
+      use hfb_solution, only : nghl
+      use hfb_solution, only : hfb_density_coord
+      use type_extfield_2bc, only : caux,c3,c4, cd
+      use pnfam_constants, only : Mpi, hbarc, IT_ISOSCALAR
+      implicit none
+      real(dp), dimension(nghl) :: rho, kf, i0, iout
+      real(dp) :: m, ca, ch
+      character(200) :: st
+      ! Constants
+      m = Mpi/hbarc
+      ca = 2*caux
+      ch = 1._dp/3._dp*(2*c4 - c3 + 0.5_dp)
+
+      ! Densities
+      call hfb_density_coord(IT_ISOSCALAR, rho)
+      kf = lda_kf_snm(rho)
+      i0 = tbc_nmlda_I0_vec(kf)
+      iout = ca*rho*(cd+ch*i0)
+
+      !testing
+      write(st,'(a20,f10.5,a20,f10.5,a20)') 'iout value for kf ', kf(10), 'iout', iout(10), 'in gt2bc.'
+      call writelog(st)
+   end function
+
    function dme_u00(kf) result(u00)
       use hfb_solution, only : nghl
       use pnfam_constants, only : hbarc, Mpi
@@ -1354,25 +1465,26 @@ contains
 
    !DME current for the vector current term.
    function dme_vector() result(rf)
-      use hfb_solution, only : nghl
+      use hfb_solution, only : nghl, y
       use hfb_solution, only : hfb_density_coord, d2rho, tau
       use pnfam_constants, only : Mpi, Mn, Fpi, gA, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON, pi
       implicit none
-      real(dp), dimension(nghl) :: rho, kf, u10, u12, u12_kf2, u22, u24, u24_kf4, rf, d2r0, tau0
+      real(dp), dimension(nghl) :: rho, kf, u10, u12, u12_kf2, u22, u24, u24_kf4, rf, d2r0, tau0, r
       real(dp) :: m
       character(len=200) :: st
       logical :: exists
       integer :: loopvar
+
       m = Mpi/hbarc
+      ! Define r(:) = 1/(1/rho)
+      r(:) = 1.0_dp/y(:)
       ! Densities
       call hfb_density_coord(IT_ISOSCALAR, rho)
       d2r0 = d2rho(:,IT_NEUTRON)+d2rho(:,IT_PROTON)
       tau0 = tau(:,IT_NEUTRON)+tau(:,IT_PROTON)
 
       rf = 0
-      !test out if the integrals are the problem.
-      !write(st,'(a15)') 'first item ine.'
-      !call writelog(st)
+
       ! DME integrals
       kf = lda_kf_snm(rho) ! 1/fm
       u10 = dme_u10(kf)
@@ -1387,12 +1499,20 @@ contains
       
       !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u10 + 0.1_dp*u12)*rho + u22 - u24*kf/(60.0_dp*pi*pi))
       !rf =  (0.25_dp*d2r0 - tau0)
-      rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u10 + 0.1_dp*u12)*rho + u22 - u24*kf/(60.0_dp*pi*pi)&
-      + (u12_kf2/6.0_dp - u24_kf4) * (0.25_dp*d2r0 - tau0))
-      !try writing kf output to a file. check if exists first - only write once
-      !inquire(file="rf_d2r0_tau0.txt", exist=exists)
+      
+      !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u10 + 0.1_dp*u12)*rho + u22 - u24*kf/(60.0_dp*pi*pi)&
+      !+ (u12_kf2/6.0_dp - u24_kf4) * (0.25_dp*d2r0 - tau0))
+
+      !constant density case: only u10, u22 terms survive, other terms cancel.
+      rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * (u10*rho + u22)
+      !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ((u10 + 0.1_dp*u12)*rho + u22 - u24*kf/(60.0_dp*pi*pi))
+      !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ((u10 + 0.1_dp*u12)*rho - kf * u24/(60.0_dp*pi*pi) + u22)
+      !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ((u12_kf2/6.0_dp - u24_kf4))
+
+      !try writing output to a file. check if exists first - only write once
+      !inquire(file="rf_part1_dme_updated.txt", exist=exists)
       !if (exists .eqv. .false.) then
-      !   open(12, file = 'rf_d2r0_tau0.txt', status = 'new')
+      !   open(12, file = 'rf_part1_dme_updated.txt', status = 'new')
       !   do loopvar=1,nghl  
       !      write(12,*) rf(loopvar)
       !   end do  
@@ -1403,4 +1523,3 @@ contains
       ! Full expression - multiply by 1/prefactor = -Mn.
    end function
 end module pnfam_extfield
-

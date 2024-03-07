@@ -1,0 +1,41 @@
+&general
+    fam_output_filename = 'GT-K0'
+    print_stdout = .true.
+    use_fam_storage = 0
+    real_eqrpa = 1.0
+    imag_eqrpa = 1.0
+/
+
+&ext_field
+    beta_type = '-'
+    operator_name = 'GT'
+    operator_k = 0
+    compute_crossterms = .true.
+    two_body_current_mode = 111100
+    two_body_current_usep = .false.
+    two_body_current_lecs = -3.1962, 3.1962, 0
+/
+
+&interaction
+    interaction_name = 'SKOP'
+    require_self_consistency = .true.
+    require_gauge_invariance = .true.
+    force_j2_terms = .false.
+    vpair_t0 = -346.352
+    vpair_t1 = ,
+    override_cs0 = 128.279
+    override_csr = 0.0
+    override_cds = 0.0
+    override_ct = ,
+    override_cgs = ,
+    override_cf = ,
+/
+
+&solver
+    max_iter = 300
+    convergence_epsilon = 1e-07
+    broyden_history_size = 50
+    energy_shift_prot = 0.0
+    energy_shift_neut = 0.0
+    quench_residual_int = 1.0
+/

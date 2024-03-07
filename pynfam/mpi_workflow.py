@@ -223,7 +223,8 @@ def pynfam_calc(index, index2, pynfam_inputs, override_settings, comm, do_fam, s
     if hfb_gs is None: return
 
     nshells = hfb_gs.nml[u'HFBTHO_GENERAL'][u'number_of_shells']
-    err = initialize_fam_2bc(mgr, fam_ops, setts, rerun, stdout, nshells)
+
+    err = initialize_fam_2bc(comm, mgr, fam_ops, setts, rerun, stdout, nshells)
     if rerun == 2 or err:
         if not err:
             msg = u"Rerun mode for 2BC calculation requested. Exiting after 2BC calc."

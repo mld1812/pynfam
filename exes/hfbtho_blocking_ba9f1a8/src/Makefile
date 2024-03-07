@@ -21,7 +21,7 @@ DOCUMENTATION = FALSE
 #   - USE_OPENMP ...........: enables OpenMP multithreading
 #   - USE_PETSC ............: uses Petsc library for ...
 USE_ESSL   = 0
-USE_OPENMP = 0
+USE_OPENMP = 1
 USE_PETSC  = 0
 # Physics options
 #   - USE_MPI .............: 1, ANL optimization
