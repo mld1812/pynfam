@@ -1,0 +1,16 @@
+# Nuclear Beta Decay Total Strengths (PRC 90 024308 (2014) A2)
+# PynFAM code version: 2.0.0
+# Run Date: 2024-03-09 12:17
+# Summary Data:
+#   FAM_ctr     = CIRCLE on (0.00e+00, 1.05e+01)      , temper      = 0.00000   
+#   beta_type   = -         , quadratr    = GAUSS     , Half_Width  = N/A       , screening   = N/A       
+#   psi_approx  = RATINT    , psi_glpts   = 15        , ratint_pts  = 20        
+#   Zi          = 16        , A           = 40        , Zf          = 17        , HFB_Qval    = 7.70087   
+#   FAM_Qval    = N/A       , EQRPAmax    = 10.47604  , E_1stPeak   = N/A       , |gA|/gV     = 1.27000   
+#   gA          = -1.27000  , gV          = 1.00000   , M_nucleon   = 939.00000 , alpha*Z     = 0.12405   
+#   Radius      = 0.01063   , alpha*Z/2R  = 5.83646   , W0_max      = 16.07022  , W0*R        = 0.18096   
+#
+                        B_total                Unphysical
+F-K0     7.3610277323303760e-03   -9.3234610570175347e-17
+GT-K0    1.6185365796904578e+00    5.6927136209182841e-16
+GT-K1    3.2370734993295653e+00    5.8591132434063914e-16

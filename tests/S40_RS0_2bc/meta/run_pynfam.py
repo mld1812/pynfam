@@ -47,7 +47,7 @@ override_settings = {
  'fam' : {# 'interaction_name' : 'SKM*',
           #'vpair_t0'         : 0.0,
           #'convergence_epsilon' : 1e-2,
-          #'max_iter'         : 2,
+         # 'max_iter'         : 2,
           #'require_gauge_invariance': False,
           #'override_cs0'        : '',
           #'override_csr'        : '',

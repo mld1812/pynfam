@@ -834,7 +834,7 @@ contains
          if (nxterms == 2) then
             ! OP x RS0
             ixterm = 1
-            call init_external_field(cbeta(ibeta), label='RS0', k=op%k, op=crossterms(ixterm))
+            call init_external_field(cbeta(ibeta), label='RS0', k=op%k, op=crossterms(ixterm), use_2bc = use_2bc)
             crossterms(ixterm)%label = trim(op%label)//'x'//trim(crossterms(ixterm)%label)
             ! OP x PS0
             ixterm = 2
@@ -848,15 +848,15 @@ contains
             crossterms(ixterm)%label = trim(op%label)//'x'//trim(crossterms(ixterm)%label)
             ! OP x RS1
             ixterm = 2
-            call init_external_field(cbeta(ibeta), label='RS1', k=op%k, op=crossterms(ixterm))
+            call init_external_field(cbeta(ibeta), label='RS1', k=op%k, op=crossterms(ixterm), use_2bc = use_2bc)
             crossterms(ixterm)%label = trim(op%label)//'x'//trim(crossterms(ixterm)%label)
             ! OP x P
             ixterm = 3
-            if (present(use_2bc)) then
-               call init_external_field(cbeta(ibeta), label='P', k=op%k, op=crossterms(ixterm), use_2bc = use_2bc)
-            else
-               call init_external_field(cbeta(ibeta), label='P', k=op%k, op=crossterms(ixterm))
-            end if 
+            !if (present(use_2bc)) then
+            !   call init_external_field(cbeta(ibeta), label='P', k=op%k, op=crossterms(ixterm), use_2bc = use_2bc)
+            !else
+            call init_external_field(cbeta(ibeta), label='P', k=op%k, op=crossterms(ixterm))
+            !end if 
             crossterms(ixterm)%label = trim(op%label)//'x'//trim(crossterms(ixterm)%label)
          end if
       end if
@@ -1082,8 +1082,8 @@ contains
       iout = ca*rho*(cd+ch*i0)
 
       !testing
-      write(st,'(a20,f10.5,a20,f10.5,a20)') 'iout value for kf ', kf(10), 'iout', iout(10), 'in gt2bc.'
-      call writelog(st)
+      !write(st,'(a20,f10.5,a20,f10.5,a20)') 'iout value for kf ', kf(10), 'iout', iout(10), 'in gt2bc.'
+      !call writelog(st)
    end function
 
    function dme_u00(kf) result(u00)
