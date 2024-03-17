@@ -71,12 +71,13 @@ class pynfamManager(object):
               - gatherBetaMasterLog
     """
 
-    def __init__(self, pynfam_paths):
+    def __init__(self, pynfam_paths, retry_nc=True):
         if isinstance(pynfam_paths,str):
             topdir = os.path.dirname(pynfam_paths)
             label = os.path.basename(os.path.normpath(pynfam_paths))
             pynfam_paths = pynfamPaths(label, topdir)
         self.paths = pynfam_paths
+        self.retry_nc = retry_nc
 
 
     #==============================================================#
@@ -160,6 +161,7 @@ class pynfamManager(object):
         hfb.updateOutput(outfile, get_soln=True)
 
         if hfb.soln_err: raise IOError(u"Problem parsing HFBTHO output.")
+        hfb.delete_tmps([]) # delete possible temporary files
         return hfb
 
     #--------------------------------------------------------------
@@ -199,6 +201,8 @@ class pynfamManager(object):
         #    'theta' : self.contour.theta[i],
         #    'glwt'  : self.contour.glwts[i]
         #    }
+        # delete possible temporary files
+        fam.delete_tmps([os.path.join(fam.rundir, os.path.basename(x)) for x in fam.tmp_inputs])
         return fam
 
     #--------------------------------------------------------------
@@ -298,7 +302,8 @@ class pynfamManager(object):
             # hfb meta, with tarfile - untar and treat as untarred
             else:
                 with tarfile.open(ftar) as tf:
-                    tf.extractall(path=p.hfb_m)
+                    for member in tf:
+                        tf.extract(member, path=p.hfb_m, set_attrs=False)
                 copy2(ftar, os.path.join(p.hfb_m, hfbthoRun.file_tar))
                 os.remove(ftar)
                 return None
@@ -346,11 +351,11 @@ class pynfamManager(object):
 
         # In addition, do not consider tasks complete unless:
         # 1. Namelist and text output contain correctly formatted data (to populate instance)
-        # 2. They are converged
+        # 2. They are converged (when retry_nc == True)
         for l in lfin_f:
             try:
                 obj = self.getHfbthoRun(l, beta_type)
-                if obj.soln_dict[u'Conv']==u'Yes':
+                if (not self.retry_nc) or obj.soln_dict[u'Conv']==u'Yes':
                     fin.append(obj)
                 else:
                     # Allow for more iterations on NC solns
@@ -439,7 +444,8 @@ class pynfamManager(object):
         if recalc:
             if os.path.exists(ftar):
                 with tarfile.open(ftar) as tf:
-                    tf.extractall(path=p.hfb_m)
+                    for member in tf:
+                        tf.extract(member, path=p.hfb_m, set_attrs=False)
                 # Avoid overwriting original data
                 copy2(ftar, os.path.join(p.hfb_m, ftar.split('.tar')[0]+u'_og.tar'))
 
@@ -558,7 +564,8 @@ class pynfamManager(object):
             # warrant including a barrier/bcast for typical runs.
             if os.path.exists(ftar):
                 with tarfile.open(ftar) as tf:
-                    tf.extractall(path=fam_m)
+                    for member in tf:
+                        tf.extract(member, path=fam_m, set_attrs=False)
                 # Avoid overwriting original data by renaming the original tar
                 copy2(ftar, os.path.join(fam_m, ftar.split('.tar')[0]+u'_og.tar'))
 

@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH -p debug_queue 
+#SBATCH -p skylake 
 #SBATCH -J gsXXX
 #SBATCH -o out_%A.out
-#SBATCH -N 2
-#SBATCH --ntasks-per-node=44 
+#SBATCH -N 4     #skylake: N=2, --ntasks-per-node=40, time = 2 days.
+#SBATCH --ntasks-per-node=40
 #SBATCH --time=00-04:00:00   #format days-hh:mm:ss
 
 ulimit -s unlimited
-mpirun ./run_pynfam.py
+mpirun ./run_pynfam5.py
 

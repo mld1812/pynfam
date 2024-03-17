@@ -21,7 +21,7 @@ __version__ = u'2.0.0'
 __date__    = u'2019-08-28'
 
 #-------------------------------------------------------------------------------
-def initialize_fam_2bc(mgr, fam_ops, setts, rerun, stdout, nshells):
+def initialize_fam_2bc(comm, mgr, fam_ops, setts, rerun, stdout, index, nshells):
 
     nml_params = setts[u'fam']
     tbc_mode = nml_params.get(u'two_body_current_mode', 0)
@@ -33,22 +33,54 @@ def initialize_fam_2bc(mgr, fam_ops, setts, rerun, stdout, nshells):
             return
 
     err = []
+    #2/5/24 Search for GT, 0/GT, 1 in fam_ops. If both are present then run in parallel using runtasks_master
+    GT_Ks_requested = []
     for d in fam_ops:
-        fam_rep = pnfamRun(mgr.paths, d[u'op'], d[u'k'])
-        fam_rep.label = mgr.paths.hfb
-        if nml_params is not None:
-            fam_rep.setNmlParam(nml_params)
-        fam_rep.setCtrPoint(1+1j) # Dummy energy
-        tbc_input = os.path.join(mgr.paths.hfb, u'{:}.tbc'.format(fam_rep.opname))
+        if d[u'op'][:2] == 'GT':
+            #create pnfamRun object with settings and add to list.
+            fam_rep = pnfamRun(mgr.paths, d[u'op'], d[u'k'])
+            fam_rep.label = mgr.paths.hfb
+            if nml_params is not None:
+                fam_rep.setNmlParam(nml_params)
+            fam_rep.setCtrPoint(1+1j) # Dummy energy
+            #check if the file exists.
+            tbc_input = os.path.join(mgr.paths.hfb, u'{:}.tbc'.format(fam_rep.opname))
+            if not os.path.exists(tbc_input):
+                GT_Ks_requested.append(fam_rep)
+    if len(GT_Ks_requested) > 1:
+        #call runtasks_master
+        finished_tasks, err_run, err_msg = runtasks_master(GT_Ks_requested, comm, stdout, index)
+        if err_run:   
+            msg = [f"Error encountered initializing 2BC:{err_msg}"]
+            pynfam_warn(msg, mgr.paths.calclabel, err_run)
+    elif len(GT_Ks_requested) == 1:
+        #run the singular object.
+        err_msg = fam_rep.runExe(stdout)
+        if err_msg is not None:
+            msg = [f"Error encountered initializing 2BC:{err_msg}"]
+            pynfam_warn(msg, mgr.paths.calclabel, True)
+    return False #no error
+    """
+    for d in fam_ops:
+        #2/2/24 only run this if op = GT.
+        if d[u'op'][:2] == 'GT':
+            fam_rep = pnfamRun(mgr.paths, d[u'op'], d[u'k'])
+            fam_rep.label = mgr.paths.hfb
+            if nml_params is not None:
+                fam_rep.setNmlParam(nml_params)
+            fam_rep.setCtrPoint(1+1j) # Dummy energy
+            tbc_input = os.path.join(mgr.paths.hfb, u'{:}.tbc'.format(fam_rep.opname))
 
-        if not os.path.exists(tbc_input):
-            if rerun != 2:
-                if nshells <= 6: break
-                err = [u"Required .tbc file not found in hfb_soln."]
-                break
-            else:
+            if not os.path.exists(tbc_input):
                 err.append(fam_rep.runExe(stdout))
-
+                # 1/25/24 Comment this out since it causes errors when trying to run 2bc with >6 shells. 
+                if rerun != 2:
+                    if nshells <= 6: break
+                    err = [u"Required .tbc file not found in hfb_soln."]
+                    break
+                else:
+                    err.append(fam_rep.runExe(stdout))
+                
     #**** Check for Errors ****#
     err = [e for e in err if e is not None]
     err_run = bool(err)
@@ -58,7 +90,7 @@ def initialize_fam_2bc(mgr, fam_ops, setts, rerun, stdout, nshells):
     #**************************#
 
     return err_run
-
+    """
 #-------------------------------------------------------------------------------
 def initialize_fam_contour(mgr, setts, ctr_type, beta_type, hfb_gs):
 
@@ -139,9 +171,9 @@ def initialize_fam_calc(mgr, setts, fam_ops, contours, hfb_gs):
     return contour_set, (all_fam_unf, all_fam_fin)
 
 #-------------------------------------------------------------------------------
-def run_fam_calc(comm, mgr, stdout, all_fam_unf, all_fam_fin):
+def run_fam_calc(comm, mgr, stdout, index, all_fam_unf, all_fam_fin):
 
-    finished_pts, err_run, err_msg = runtasks_master(all_fam_unf, comm, stdout)
+    finished_pts, err_run, err_msg = runtasks_master(all_fam_unf, comm, stdout, index)
 
     #**** Check for Errors ****#
     msg = [pnfamRun.file_exe+u" encountered an error.",err_msg]

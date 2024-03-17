@@ -477,7 +477,6 @@ class shapeFactor(phaseSpace):
         for i in nps:
             # Q value can be negative for EC at FT
             if hfb_qval < 0 and not (self.beta == u'c' and ft_active):
-                print("qval < 0")
                 ps[u'f'+str(i)] = np.zeros(len(eqrpa))
             else:
                 if self.beta == u'c' and ft_active:

@@ -44,9 +44,9 @@ def initialize_hfb_calc(mgr, beta_type, gs_def_scan, setts, dripline, index2):
     return hfb_main, hfb_gs, even_unf_fin, odd_unf_fin
 
 #-------------------------------------------------------------------------------
-def run_hfb_even_calc(Comm, mgr, ignore_nc, stdout, even_unf, even_fin):
+def run_hfb_even_calc(Comm, mgr, ignore_nc, stdout, index, even_unf, even_fin):
 
-    finished_nucs, err_run, err_msg = runtasks_master(even_unf, Comm, stdout)
+    finished_nucs, err_run, err_msg = runtasks_master(even_unf, Comm, stdout, index)
 
     #**** Check for Errors ****#
     msg = [hfbthoRun.file_exe+u" encountered an error running initial solutions.",err_msg]
@@ -54,16 +54,17 @@ def run_hfb_even_calc(Comm, mgr, ignore_nc, stdout, even_unf, even_fin):
         return None # break dripline loop, end calc
     #**************************#
 
-    # Retry non-conv with a basis deformation determined by non-conv soln
-    rerun_tasks, finished_nucs = hfbEvenRerunList(finished_nucs)
-    finished_reruns, err_rerun, err_msg = runtasks_master(rerun_tasks, Comm, stdout)
-    finished_nucs += finished_reruns
+    if mgr.retry_nc:
+        # Retry non-conv with a basis deformation determined by non-conv soln
+        rerun_tasks, finished_nucs = hfbEvenRerunList(finished_nucs)
+        finished_reruns, err_rerun, err_msg = runtasks_master(rerun_tasks, Comm, stdout, index)
+        finished_nucs += finished_reruns
 
-    #**** Check for Errors ****#
-    msg = [hfbthoRun.file_exe+u" encountered an error re-running initial solutions.",err_msg]
-    if pynfam_warn(msg, mgr.paths.calclabel, err_rerun):
-        return None # break dripline loop, end calc
-    #**************************#
+        #**** Check for Errors ****#
+        msg = [hfbthoRun.file_exe+u" encountered an error re-running initial solutions.",err_msg]
+        if pynfam_warn(msg, mgr.paths.calclabel, err_rerun):
+            return None # break dripline loop, end calc
+        #**************************#
 
     even_fin += finished_nucs
     err_conv = False
@@ -83,7 +84,7 @@ def run_hfb_even_calc(Comm, mgr, ignore_nc, stdout, even_unf, even_fin):
     return even_fin
 
 #-------------------------------------------------------------------------------
-def run_hfb_odd_calc(comm, mgr, ignore_nc, stdout, gs_def_scan, hfb_main, even_fin, odd_unf, odd_fin):
+def run_hfb_odd_calc(comm, mgr, ignore_nc, stdout, index, gs_def_scan, hfb_main, even_fin, odd_unf, odd_fin):
 
     # No secondary hfb calcs
     if not (hfb_main.blocking[0][0] or hfb_main.blocking[1][0]) and not hfb_main.ft_active:
@@ -100,7 +101,7 @@ def run_hfb_odd_calc(comm, mgr, ignore_nc, stdout, gs_def_scan, hfb_main, even_f
             even_conv = hfbConvCheck(even_fin, ignore_nc)[0]
             odd_unf = hfbOddList(even_conv, hfb_main, gs_def_scan[0])
 
-    finished_nucs, err_run, err_msg = runtasks_master(odd_unf, comm, stdout)
+    finished_nucs, err_run, err_msg = runtasks_master(odd_unf, comm, stdout, index)
 
     #**** Check for Errors ****#
     msg = [hfbthoRun.file_exe+u" encountered an error running odd solutions.",err_msg]

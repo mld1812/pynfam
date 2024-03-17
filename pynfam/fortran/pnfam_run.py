@@ -151,7 +151,7 @@ class pnfamRun(fortProcess):
 
         # Returns stdout, stderr.
         stmt = [os.path.join(self.paths.exe, self.exe), self.fname_nml]
-        out, err = fortProcess.runExe(self, stdout_bool=stdout_bool,
+        _, err = fortProcess.runExe(self, stdout_bool=stdout_bool, stdout_return=False,
             statement=stmt, debug=debug)
 
         outfile = os.path.join(self.rundir, self.file_txt)
@@ -202,6 +202,7 @@ class pnfamRun(fortProcess):
         sd[u'Version']  = soln.getVersion()
         sd[u'Strength'] = soln.getStrength()
         sd[u'Xterms']   = soln.getXterms()
+        sd[u'Si']   = soln.getSi()
 
         return sd, soln.err, soln.err_msg
 

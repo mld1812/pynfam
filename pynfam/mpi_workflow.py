@@ -8,6 +8,7 @@ from shutil import copy2
 import numpy as np
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 # ----------- Relative Imports -------------
 from .pynfam_manager        import pynfamManager
@@ -37,7 +38,7 @@ __date__    = u'2019-07-26'
 #===============================================================================#
 #                       Primary Pynfam Functions                                #
 #===============================================================================#
-def pynfam_mpi_calc(pynfam_inputs, override_settings, check=False):
+def pynfam_mpi_calc(pynfam_inputs, override_settings, check=False, comm=None):
     """
     A top level function to handle most of the MPI of a large scale pynfam calculation.
 
@@ -45,14 +46,20 @@ def pynfam_mpi_calc(pynfam_inputs, override_settings, check=False):
         pynfam_inputs (dict)
         override_settings (dict)
         check (bool)
+        comm (mpi4py.MPI.Intracomm, None)
     """
 
     # Setup MPI variables
     if do_mpi:
-        comm = mu.MPI.COMM_WORLD
+        if comm is None: # no MPI communicator input from outside wrapper
+            comm = mu.MPI.COMM_WORLD
+        assert(isinstance(comm, mu.MPI.Comm))
     else:
         comm = 0
     rank, comm_size = mu.pynfam_mpi_traits(comm)
+    if mu.do_mpi and (comm_size == 1):
+        mu.do_mpi = False
+        print(u"*** Only one MPI task requested. Performing serial calculation. ***")
 
     # User input values valid? (All processes must run this b/c we format some inputs)
     inp_err_i = wu.pynfam_input_check(pynfam_inputs)
@@ -66,17 +73,20 @@ def pynfam_mpi_calc(pynfam_inputs, override_settings, check=False):
     if rank == 0:
         if inp_err: mu.pynfam_abort(comm, inp_err)
 
-    # Setup MPI related parameters, split comm into master/worker.
-    inp_err, mpi_wrn, newcomm, group, stdout = wu.pynfam_mpi_init(pynfam_inputs, nr_calcs, comm, check)
+    # Setup MPI related parameters, split comm into master/worker and admin/employee.
+    inp_err, mpi_wrn, comm_mw, comm_ae, group, max_threads, stdout = wu.pynfam_mpi_init(pynfam_inputs, nr_calcs, comm, check)
     if rank == 0:
         if inp_err and not check: mu.pynfam_abort(comm, inp_err)
         if mpi_wrn: mu.pynfam_warn(mpi_wrn)
 
     # STOP here if we just wanted to check all the inputs but not run.
-    if rank==0 and check:
-        if inp_wrn: mu.pynfam_warn(inp_wrn)
-        check_msg = u"Input check complete. No errors were detected."
-        mu.pynfam_abort(comm, check_msg)
+    if check:
+        if rank == 0:
+            if inp_wrn: mu.pynfam_warn(inp_wrn)
+            check_msg = u"Input check complete. No errors were detected."
+            # mu.pynfam_abort(comm, check_msg)
+            print(check_msg); sys.stdout.flush()
+        return
 
     # Setup PyNFAM directory tree
     if rank==0:
@@ -86,24 +96,25 @@ def pynfam_mpi_calc(pynfam_inputs, override_settings, check=False):
     if group == 0:
         kwargs = {u'pynfam_inputs': pynfam_inputs,
                   u'override_settings': override_settings,
-                  u'comm': comm,
+                  u'comm': comm_ae,
                   u'do_fam': do_fam,
                   u'stdout': stdout,
                   u'exst_data': exst_data
                   }
-        rank, nr_masters = mu.pynfam_mpi_traits(newcomm)
-        icalc = rank
-        while True:
-            if icalc > nr_calcs - 1: break
-            index = icalc
-            icalc += nr_masters
-            kwargs.update({u'index': index})
-            pynfam_dripline_calc(**kwargs)
+        rank, nr_masters = mu.pynfam_mpi_traits(comm_mw)
+        if max_threads <= 1: # Single thread
+            for icalc in range(rank, nr_calcs, nr_masters):
+                pynfam_dripline_calc(**kwargs, index=icalc)
+        else: # Multithreading
+            with ThreadPoolExecutor(max_workers=max_threads) as executor:
+                for icalc in range(rank, nr_calcs, nr_masters):
+                    executor.submit(pynfam_dripline_calc, **kwargs, index=icalc)
 
-        if do_mpi: mu.runtasks_killsignal(comm, newcomm) # Barrier
+        if mu.do_mpi: mu.runtasks_killsignal(comm_ae, comm_mw) # Barrier
+
     # All else are workers. They don't know anything, just run tasks
     else:
-        mu.runtasks_worker(comm, newcomm, stdout)
+        mu.runtasks_worker(comm_ae, comm_mw, stdout)
 
     if do_mpi: comm.Barrier()
     if rank==0: wu.pynfam_finalize(pynfam_inputs)
@@ -173,10 +184,20 @@ def pynfam_calc(index, index2, pynfam_inputs, override_settings, comm, do_fam, s
 
     dripline    = pynfam_inputs[u'hfb_mode']['dripline_mode']
     gs_def_scan = pynfam_inputs[u'hfb_mode']['gs_def_scan']
+    if isinstance(gs_def_scan, list):
+        gs_def_scan = gs_def_scan[index]
     ignore_nc   = pynfam_inputs[u'hfb_mode']['ignore_nonconv']
+    retry_nc    = pynfam_inputs[u'hfb_mode'].get('retry_nonconv',True) # backward compatibility
+    ex_inputs   = pynfam_inputs[u'hfb_mode'].get('extra_inputs',()) # backward compatibility
+    if isinstance(ex_inputs, list):
+        ex_inputs = ex_inputs[index]
 
     beta_type   = pynfam_inputs[u'fam_mode']['beta_type']
+    if isinstance(beta_type, list):
+        beta_type = beta_type[index]
     fam_ops_in  = pynfam_inputs[u'fam_mode']['fam_ops']
+    if isinstance(fam_ops_in, list):
+        fam_ops_in = fam_ops_in[index]
     ctr_type    = pynfam_inputs[u'fam_mode']['fam_contour']
 
     fam_ops = wu.get_fam_ops(fam_ops_in, beta_type)
@@ -192,8 +213,8 @@ def pynfam_calc(index, index2, pynfam_inputs, override_settings, comm, do_fam, s
         calclabel += u'_'+str(index2).zfill(4)
 
     # Paths (requires a calclabel, otherwise not fully defined) and manager
-    all_paths = pynfamPaths(calclabel, dirs[u'outputs'], dirs[u'exes'], dirs[u'scratch'])
-    mgr = pynfamManager(all_paths)
+    all_paths = pynfamPaths(calclabel, dirs[u'outputs'], dirs[u'exes'], dirs[u'scratch'], ex_inputs)
+    mgr = pynfamManager(all_paths, retry_nc)
     mgr.paths.mkdirs()
 
     #---------------------------------------------------------------------------#
@@ -205,7 +226,7 @@ def pynfam_calc(index, index2, pynfam_inputs, override_settings, comm, do_fam, s
     even_fin, odd_fin = hfb_evens[1], hfb_odds[1]
 
     if hfb_gs is None:
-        even_fin = run_hfb_even_calc(comm, mgr, ignore_nc, stdout, *hfb_evens)
+        even_fin = run_hfb_even_calc(comm, mgr, ignore_nc, stdout, index, *hfb_evens)
         if even_fin is None: return
 
         # We need the 0T gs for FT calcs logfiles. If no viable gs, end calc
@@ -213,7 +234,7 @@ def pynfam_calc(index, index2, pynfam_inputs, override_settings, comm, do_fam, s
             hfb_gs_0T = finalize_hfb_gs(mgr, ignore_nc, hfb_main, odd_fin=even_fin, even_fin=[])
             if hfb_gs_0T is None: return
 
-        odd_fin = run_hfb_odd_calc(comm, mgr, ignore_nc, stdout,
+        odd_fin = run_hfb_odd_calc(comm, mgr, ignore_nc, stdout, index,
                 gs_def_scan, hfb_main, even_fin, *hfb_odds)
         if odd_fin is None: return
 
@@ -224,7 +245,7 @@ def pynfam_calc(index, index2, pynfam_inputs, override_settings, comm, do_fam, s
 
     nshells = hfb_gs.nml[u'HFBTHO_GENERAL'][u'number_of_shells']
 
-    err = initialize_fam_2bc(mgr, fam_ops, setts, rerun, stdout, nshells)
+    err = initialize_fam_2bc(comm, mgr, fam_ops, setts, rerun, stdout, index, nshells)
     if rerun == 2 or err:
         if not err:
             msg = u"Rerun mode for 2BC calculation requested. Exiting after 2BC calc."
@@ -244,7 +265,7 @@ def pynfam_calc(index, index2, pynfam_inputs, override_settings, comm, do_fam, s
 
     contour_set, fam_pts = initialize_fam_calc(mgr, setts, fam_ops, ctr_main, hfb_gs)
 
-    all_fam_fin = run_fam_calc(comm, mgr, stdout, *fam_pts)
+    all_fam_fin = run_fam_calc(comm, mgr, stdout, index, *fam_pts)
     if all_fam_fin is None: return hfb_gs
 
     finalize_fam_calc(mgr, contour_set, all_fam_fin)
