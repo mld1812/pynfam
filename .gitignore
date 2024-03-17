@@ -4,3 +4,5 @@ __pycache__/
 #fortran binaries
 *.mod
 *.o
+*.out
+tests/
