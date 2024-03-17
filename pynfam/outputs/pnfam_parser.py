@@ -38,7 +38,8 @@ class pnfamParser(parser):
                      u"interaction": u"Residual interaction",
                      u"operator"   : u"Operator:",
                      u"half_width" : u"Gamma",
-                     u"strength"   : u"Re(EQRPA)"}
+                     u"strength"   : u"Re(EQRPA)",
+                     u"si"         : u"si ="}
 
     #-----------------------------------------------------------------------
     def getTime(self):
@@ -107,7 +108,8 @@ class pnfamParser(parser):
             str_vals = [None]*(2*len(df.index))
             str_vals[::2] = df[u"Real"].values
             str_vals[1::2] = df[u"Imag"].values
-            if any(v is None for v in str_vals): raise Exception
+            if any(pd.isnull(v) for v in str_vals):
+                raise Exception
             strength = [{u'label':h,u'val':float(d)} for h, d in zip(labels,str_vals)]
         except Exception:
             strength = 2*[{u'label':self.str_err, u'val':self.float_err}]
@@ -130,6 +132,22 @@ class pnfamParser(parser):
             xterms = []
             self.flagError(u"Error parsing cross terms from FAM output.")
         return xterms
+    
+    #-----------------------------------------------------------------------
+    def getSi(self):
+        """
+        Parse for si (accuracy).
+
+        Returns:
+            float
+        """
+        try:
+            si_line = self.getLineIndices(self.keys[u'si'])[0]
+            si = self.getAllNumbers(self.output[si_line])[1]
+        except Exception:
+            si = self.float_err
+            self.flagError(u"Error parsing si from FAM output.")
+        return si
 
 #===============================================================================#
 #                             CLASS strengthOutParser                           #
@@ -232,3 +250,19 @@ class strengthOutParser(parser):
             time_list = np.array([self.float_err])
             self.flagError(u"Error parsing time list from strength output.")
         return time_list
+
+    #-----------------------------------------------------------------------
+    def getAllSi(self):
+        """
+        Parse for the entire si (accuracy) column.
+
+        Returns:
+            ndarray
+        """
+        try:
+            df = pd.read_csv(self.src, delim_whitespace=True, header=0, comment=u'#')
+            si_list = df[u'Si'].dropna().values
+        except Exception:
+            si_list = np.array([self.float_err])
+            self.flagError(u"Error parsing si list from strength output.")
+        return si_list

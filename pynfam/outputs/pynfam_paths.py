@@ -66,6 +66,7 @@ class pynfamPaths(object):
         scr (str): absolute path to the scratch working directory.
         calclabel (str): unique label for pynfam directory under the top level directory..
         _lsdir (str): name of the top level output directory.
+        extra_inputs (tuple): absolute paths of extra input files for HFBTHO.
     """
 
     subdir_meta  = u'meta'
@@ -96,7 +97,7 @@ class pynfamPaths(object):
     """ ignore (list of str): Keys to ignore in directory searchs.
     """
 
-    def __init__(self, label, ls_dir=u'./', exe_dir=u'./', scr_dir=u'./'):
+    def __init__(self, label, ls_dir=u'./', exe_dir=u'./', scr_dir=u'./', extra_inputs=()):
         self.cwd = os.getcwd()
         self.exe = os.path.abspath(exe_dir)
         self.scr = os.path.abspath(scr_dir)
@@ -104,6 +105,7 @@ class pynfamPaths(object):
         self.calclabel = str(label)
         if label is None:
             self.calclabel = label
+        self.extra_inputs = [os.path.abspath(p) for p in extra_inputs]
 
     @property
     def out(self):

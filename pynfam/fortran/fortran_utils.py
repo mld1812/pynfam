@@ -5,6 +5,7 @@ from builtins   import object
 # -------------- Utilities -----------------
 from shutil import copy2
 import os
+import stat
 import sys
 import copy
 import f90nml
@@ -27,6 +28,7 @@ else:
 # ----------- Relative Imports -------------
 from ..outputs.pynfam_paths import pynfamPaths
 # ------------------------------------------
+from glob import glob
 
 __version__ = u'2.0.0'
 __date__    = u'2019-07-26'
@@ -173,12 +175,42 @@ class fortProcess(nmlInputs):
     def __init__(self, paths, exe, fname_nml, nml=None, label=None):
         if not isinstance(paths, pynfamPaths):
             raise TypeError(u"Paths must be a pynfamPaths object")
-        self.paths = paths
+        self.paths = copy.deepcopy(paths)
         self.exe   = exe
         self.label = label
         self.tmp_inputs = []
         self.pmt_inputs = []
+        self.paths.exe = self.find_exe(self.paths.exe, self.exe)
+        if self.paths.exe is None:
+            raise IOError(u"Fortran executable "+exe+" not found")
         nmlInputs.__init__(self, fname_nml, nml)
+
+    #-----------------------------------------------------------------------
+    @staticmethod
+    def find_exe(exe_root, exe):
+        """ 
+        Find the Fortran executable (filename given by exe) in directory 
+        exe_root and its subdirectories. Assume there is only one file 
+        with the given filename in directory exe_root and its subdirectories.
+        Execute permission will be granted if it does not have it.
+
+        Returns:
+            None, str: Path of the directory that contains the Fortran executable,
+                       or None if such executable is not found.
+        """
+      
+        if not os.path.isdir(exe_root):
+            return None
+        file_path = None
+        for dirpath, _, filenames in os.walk(exe_root, topdown=True):
+            if exe in filenames:
+                file_path = os.path.join(dirpath, exe)
+                break
+        if file_path is None:
+            return None
+        if not os.access(file_path, os.X_OK):
+            os.chmod(file_path, os.stat(file_path).st_mode | stat.S_IEXEC)
+        return dirpath
 
     @property
     def rundir(self):
@@ -187,20 +219,20 @@ class fortProcess(nmlInputs):
         return os.path.join(self.paths.out,self.label)
 
     #-----------------------------------------------------------------------
-    def runExe(self, stdout_bool=False, statement=None, debug=0):
+    def runExe(self, stdout_bool=False, stdout_return=False, statement=None, debug=0):
         """
         Launch a fortran executable from rundir and capture stdout and stderr.
         Pipe captured stdout to sys stdout in real time if desired.
 
         Args:
             stdout_bool (bool): Print to stdout in real time (default False).
+            stdout_return (bool): Return stdout (default False).
             statement (str or list): Statement for Popen with shell=False
                 (default None --> '/path2exe/exe').
-            stdin (str): Filename for stdin (default None).
             debug (int): If !=0, don't run the exe (default 0).
 
         Returns:
-            list      : Stdout as list of strings
+            list      : Stdout as list of strings; empty if stdout_return is False.
             None, str : Stderr, or None if stderr is empty.
         """
 
@@ -225,12 +257,24 @@ class fortProcess(nmlInputs):
         output, err = [], u''
 
         if debug == 0:
+            if stdout_bool:
+                stdout_handle = subprocess.PIPE
+                stderr_handle = subprocess.PIPE
+            else:
+                stderr_fname = 'stderr.tmp'
+                stderr_handle = open(stderr_fname, 'w+')
+                if stdout_return:
+                    # temp files for stdout and stderr
+                    stdout_fname = 'stdout.tmp'
+                    stdout_handle = open(stdout_fname, 'w+')
+                else:
+                    stdout_handle = subprocess.DEVNULL
             # Popen docs: 'universal_newlines' is equivalent to 'text' in versions >~ 3,
             # and is provided for backwards compatibility.
             proc = subprocess.Popen(statement, shell=False, universal_newlines=True,
-                    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            # Print in real time (proc.stdout is a file object)
+                    stdin=subprocess.DEVNULL, stdout=stdout_handle, stderr=stderr_handle)
             if stdout_bool:
+                # Print in real time (proc.stdout is a file object)
                 while True:
                     so = proc.stdout.readline()
                     if so == u'' and proc.poll() is not None:
@@ -238,21 +282,39 @@ class fortProcess(nmlInputs):
                     if so:
                         sys.stdout.write(so)
                         sys.stdout.flush()
-                        output.append(so.split(u'\n')[0])
+                        if stdout_return:
+                            output.append(so.split(u'\n')[0])
                 err = proc.stderr.readline()
             else:
-                # Wait until proc is finished and get outputs
-                output_data, err = proc.communicate()
-                output = [l for l in output_data.split(u'\n')]
+                # Wait until proc is finished and get stdout
+                # output_data, err = proc.communicate()
+                # output = [l for l in output_data.split(u'\n')]
+                proc.wait()
+                if stdout_return:
+                    stdout_handle.seek(0)
+                    output = stdout_handle.readlines()
+                    stdout_handle.close()
+                stderr_handle.seek(0)
+                err = stderr_handle.readline()
+                stderr_handle.close()
+
         os.chdir(self.paths.cwd)
 
-        # Delete temporary inputs
-        for other in tmp_inputs_dest:
-            os.remove(other)
-
-        # Return stdout (a list of strings, no newline symbols), and
-        # stderr (a string or None)
-        if err == u'' or err.isspace(): err = None
+        # Obtain stderr (a string or None)
+        if err == u'' or err.isspace():
+            self.delete_tmps(tmp_inputs_dest) # Delete temporary files
+            err = None
 
         # This is wrapped by sub-classes which only return err but use output
         return output, err
+
+    def delete_tmps(self, tmp_inputs_dest):
+        """
+        Delete temporary input and output files.
+
+        Args:
+            tmp_inputs_dest: List of temporary input files.
+        """
+        for x in tmp_inputs_dest + glob(os.path.join(self.rundir, u'*.tmp')):
+            if os.path.isfile(x):
+                os.remove(x)

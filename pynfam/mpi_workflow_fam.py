@@ -21,7 +21,7 @@ __version__ = u'2.0.0'
 __date__    = u'2019-08-28'
 
 #-------------------------------------------------------------------------------
-def initialize_fam_2bc(comm, mgr, fam_ops, setts, rerun, stdout, nshells):
+def initialize_fam_2bc(comm, mgr, fam_ops, setts, rerun, stdout, index, nshells):
 
     nml_params = setts[u'fam']
     tbc_mode = nml_params.get(u'two_body_current_mode', 0)
@@ -49,7 +49,7 @@ def initialize_fam_2bc(comm, mgr, fam_ops, setts, rerun, stdout, nshells):
                 GT_Ks_requested.append(fam_rep)
     if len(GT_Ks_requested) > 1:
         #call runtasks_master
-        finished_tasks, err_run, err_msg = runtasks_master(GT_Ks_requested, comm, stdout)
+        finished_tasks, err_run, err_msg = runtasks_master(GT_Ks_requested, comm, stdout, index)
         if err_run:   
             msg = [f"Error encountered initializing 2BC:{err_msg}"]
             pynfam_warn(msg, mgr.paths.calclabel, err_run)
@@ -171,9 +171,9 @@ def initialize_fam_calc(mgr, setts, fam_ops, contours, hfb_gs):
     return contour_set, (all_fam_unf, all_fam_fin)
 
 #-------------------------------------------------------------------------------
-def run_fam_calc(comm, mgr, stdout, all_fam_unf, all_fam_fin):
+def run_fam_calc(comm, mgr, stdout, index, all_fam_unf, all_fam_fin):
 
-    finished_pts, err_run, err_msg = runtasks_master(all_fam_unf, comm, stdout)
+    finished_pts, err_run, err_msg = runtasks_master(all_fam_unf, comm, stdout, index)
 
     #**** Check for Errors ****#
     msg = [pnfamRun.file_exe+u" encountered an error.",err_msg]

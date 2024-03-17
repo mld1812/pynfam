@@ -4,22 +4,16 @@ from __future__ import division
 from builtins   import str
 # -------------- Utilities -----------------
 import sys
+import time
 import numpy as np
+from functools import partial
+import threading
 # ---------- MPI Implementation ------------
 do_mpi = False
-do_mpi_futures = False
 try:
     from mpi4py import MPI
-    if MPI.COMM_WORLD.Get_size()>1:
-        do_mpi = True
-        try:
-            from mpi4py.futures import MPICommExecutor
-            do_mpi_futures = True
-        except ImportError:
-            if MPI.COMM_WORLD.Get_rank()==0:
-                print(u"*** mpi4py.futures not supported. ***")
-    else:
-        print(u"*** Only one MPI task requested. Performing serial calculation. ***")
+    from mpi4py.futures import MPICommExecutor
+    do_mpi = True
 except ImportError:
     print(u"*** mpi4py not supported. Performing serial calculation. ***")
 # ------------------------------------------
@@ -28,17 +22,40 @@ __version__ = u'2.0.0'
 __date__    = u'2019-07-26'
 
 # ------------------------------------------------------------------------------
-# Tag codes (these are tags used for different data)
-t_master2lead = 10 # master pinging lead
-t_worker2lead = 20 # worker pinging lead
-t_masterID    = 30 # lead sending master rank to worker
-t_newtask     = 40 # master sending new task to worker
-t_resulterr   = 50 # worker sending result error string (or initial ping) to master
-t_resulttask  = 60 # worker sending result task to master
+# Tag code
+t_master2lead = 10000 # master sending tasks to lead
 
-# Ping codes (these are sent/recieved)
-p_kill =-9 # Terminate the program. This is compared with ranks, so use negative number
-p_ping = 1 # Meaningless data sent as a ping. This is compared with a str, so any number is fine.
+# Ping code
+p_kill =-9 # Terminate the program.
+
+# Type of thread lock
+type_lock = type(threading.Lock())
+
+# ------------------------------------------------------------------------------
+def _comm_recv(comm, source, tag, status=None):
+    """
+    This function replaces comm.recv() to avoid 100% CPU consumption.
+    The implementation is based on following code:
+    https://github.com/mpi4py/mpi4py/blob/master/src/mpi4py/futures/_core.py
+
+    Args:
+        comm (MPI.Intracomm): The MPI communicator.
+        source (int): The rank of source process where the message is sent.
+        tag (int): The tag of the MPI communication.
+        status (MPI.Status, None): The status of the MPI communication.
+
+    Returns:
+        None
+    """
+    tval = 0.0; tmax = 0.001; tmin = 0.001 / (1 << 10)
+    if not isinstance(status, MPI.Status):
+        status = MPI.Status()
+    while not comm.iprobe(source=source, tag=tag, status=status):
+        time.sleep(tval)
+        tval = min(tmax, max(tmin, tval*2))
+    source, tag = status.source, status.tag
+    message = comm.recv(source=source, tag=tag, status=status)
+    return message
 
 # ------------------------------------------------------------------------------
 def _runOneTask(task, stdout=False, dbg=0):
@@ -48,26 +65,70 @@ def _runOneTask(task, stdout=False, dbg=0):
     Args:
         task (fortProcess): A single task to run.
         stdout (bool): Print to stdout in real time if True.
-        dbg (int): If !=0 don't actually run the exectuble.
+        dbg (int): If !=0 don't actually run the executable.
 
     Returns:
         fortProcess: The input task, with now populated output.
         str, None: stderr string or None.
     """
-    err_msg = task.runExe(stdout_bool=stdout, debug=dbg)
-    return task, err_msg
+    try:
+        err_msg = task.runExe(stdout_bool=stdout, debug=dbg)
+        return task, err_msg
+    except BaseException as ex:
+        return task, str(ex)
 
 # ------------------------------------------------------------------------------
-def runtasks_master(task_list, comm_world, stdout=False, dbg=0):
+def _processOneResult(future, master, tag, storage, comm):
+    """
+    Callback function called by lead worker to store result returned by a non-lead
+    worker, and send results back to the corresponding master process once all the 
+    results have been collected. 
+
+    Args:
+        future (concurrent.futures.Future): The Future obj of the task.
+        master (int): The rank of master process to send result back.
+        tag (int): The tag to use in MPI communication.
+        storage (dict): The storage space with following components:
+            storage['length'] (int): The total number of results to process.
+            storage['results'] (list): Space to store results.
+            storage['lock'] (threading.Lock): Thread lock to avoid simultaneous
+                                              modifications on storage. 
+        comm (MPI.Intracomm): The MPI communicator.
+
+    Returns:
+        None.
+    """
+    error_msg = 'Storage space for index={:} is not properly initialized; MPI will hang.'
+    # check storage
+    if not (isinstance(storage, dict) and 'lock' in storage and isinstance(storage['lock'], type_lock)):
+        pynfam_warn(error_msg.format(tag)); return
+    with storage['lock']: # acquire lock of storage space
+        # check storage again
+        if not (storage.keys() >= {'length','results'} and isinstance(storage['length'], int) \
+                and storage['length'] > 0 and isinstance(storage['results'], list)):
+            pynfam_warn(error_msg.format(tag)); return
+        # store result
+        result = future.result()
+        storage['results'].append(result)
+        # send results back once all the results have been collected
+        if len(storage['results']) >= storage['length']:
+            comm.send(tuple(zip(*storage['results'])), dest=master, tag=tag)
+            storage['length'] = None
+            storage['results'] = []
+
+# ------------------------------------------------------------------------------
+def runtasks_master(task_list, comm_admin, stdout, index, dbg=0):
     """
     Execute a list of fortran objects serially or assigning tasks to workers
     from a shared worker pool.
 
     Args:
         task_list (list of fortProcess): List of tasks.
-        comm_world (MPI.Intracomm, int): The MPI communicator, or int if no MPI.
+        comm_admin (MPI.Intracomm, int): The MPI communicator for administrators 
+                                         (lead worker and masters), or int if no MPI.
         stdout (bool): Print to stdout in real time if True.
-        dbg (int): If !=0 don't actually run the exectuble.
+        index (int): Index of the calc, used for tag in MPI communication.
+        dbg (int): If !=0 don't actually run the executable.
 
     Returns:
         list of fortProcess: Input tasks with now populated output.
@@ -81,10 +142,9 @@ def runtasks_master(task_list, comm_world, stdout=False, dbg=0):
     if not task_list:
         return finished, err_bool, err_msg
 
-
     # Allow serial runs by passing integer Comm
     try:
-        rank, commsize = pynfam_mpi_traits(comm_world)
+        rank, commsize = pynfam_mpi_traits(comm_admin)
     except AttributeError:
         rank, commsize = 0, 1
 
@@ -97,131 +157,83 @@ def runtasks_master(task_list, comm_world, stdout=False, dbg=0):
 
     # Dynamic parallel task allocation
     else:
-        # Initialize
-        unfinished_ids = list(range(len(task_list)))
-        status_ = MPI.Status()
-        task_sent = True
+        # MASTER sends index and tasks to LEAD WORKER
+        comm_admin.send((index, task_list), dest=0, tag=t_master2lead)
 
-        # MASTER
-        while True:
-            # Ping lead worker requesting resources (NB!)
-            # *** Should only send out as many pings as there are tasks.
-            # *** Only send out a new ping once we've sent out the corresponding task. We might
-            #     receive a result from another worker BEFORE we receive the response to this
-            #     ping, in which case the task will never be sent and a worker will deadlock.
-            if unfinished_ids and task_sent:
-                comm_world.send(p_ping, dest=0, tag=t_master2lead)
-                task_sent = False
-
-            # Receive a ping or result from one of available workers
-            result_err = comm_world.recv(source=MPI.ANY_SOURCE, status=status_, tag=t_resulterr)
-            worker = status_.Get_source()
-
-            # If we got a result, store it and loop, the worker is not looking for any further communication.
-            if result_err != p_ping:
-                result_task = comm_world.recv(source=worker, tag=t_resulttask)
-                finished.append(result_task)
-                err_runs.append(result_err)
-
-            # If we got a worker ping and there are tasks, send one out
-            elif unfinished_ids:
-                task_id = unfinished_ids.pop()
-                comm_world.send(task_list[task_id], dest=worker, tag=t_newtask)
-                task_sent = True
-
-            if len(finished)>=len(task_list):
-                break
+        # MASTER waits for results from LEAD WORKER
+        finished, err_runs = _comm_recv(comm_admin, source=0, tag=index)
 
     errors = [e for e in err_runs if e is not None]
     if errors:
         err_bool = True
         err_msg = errors[0]
 
-    return finished, err_bool, err_msg
+    return list(finished), err_bool, err_msg
 
 # ------------------------------------------------------------------------------
-def runtasks_worker(comm_world, comm_worker, stdout=False, dbg=0):
+def runtasks_worker(comm_admin, comm_worker, stdout, dbg=0):
     """
     The worker pool in charge of running fortProcess objects for load balancing
     MPI calculations. A lead worker assigns resources, while workers recv/send
     fortProcess tasks/results.
 
     Args:
-        comm_world (MPI.Intracomm, int): The MPI communicator COMM_WORLD
+        comm_admin (MPI.Intracomm, int): The MPI communicator for administrators
+                                         (lead worker and masters)
         comm_worker (MPI.Intracomm, int): The MPI communicator for workers
-        dbg (int): If !=0 don't actually run the exectuble.
+        stdout (bool): Print to stdout in real time if True.
+        dbg (int): If !=0 don't actually run the executable.
 
     Returns:
-        list of fortProcess: Input tasks with now populated output.
-        bool: Was there an error?
-        str, None: stderr string or None.
+        None.
     """
 
-    # Initialize variables
-    rank_world = comm_world.Get_rank()
-    rank_worker = comm_worker.Get_rank()
-    nr_workers = comm_worker.Get_size() - 1
-    kill_total = 0
-    status_ = MPI.Status()
-
-    # LEAD WORKER (rank_worker=0 is rank_world=0)
-    if rank_world == 0:
-        while True:
-            # Look for master requesting resources
-            mping = comm_world.recv(source=MPI.ANY_SOURCE, status=status_, tag=t_master2lead)
-            master = status_.Get_source()
-            # Look for available worker
-            wping = comm_worker.recv(source=MPI.ANY_SOURCE, status=status_, tag=t_worker2lead)
-            worker = status_.Get_source()
-            # Send the master rank to the worker (or signal to terminate)
-            if mping != p_kill:
-                comm_worker.send(master, dest=worker, tag=t_masterID)
-            else:
-                comm_worker.send(p_kill, dest=worker, tag=t_masterID)
-                kill_total += 1
-            if kill_total == nr_workers:
-                break
     # WORKER POOL
-    else:
-        while True:
-            # Ping the leader to recieve rank of master in need of resources
-            comm_worker.send(p_ping, dest=0, tag=t_worker2lead)
-            master = comm_worker.recv(source=0, tag=t_masterID)
-
-            # Ping the master, get task, run it, send back result
-            if master != p_kill:
-                comm_world.send(p_ping, dest=master, tag=t_resulterr)
-                task = comm_world.recv(source=master, tag=t_newtask)
-
-                result_task, result_err = _runOneTask(task, stdout)
-
-                comm_world.send(result_err, dest=master, tag=t_resulterr)
-                comm_world.send(result_task, dest=master, tag=t_resulttask)
-            else:
-                break
+    with MPICommExecutor(comm_worker, root=0) as executor:
+        if executor is not None:
+            status_ = MPI.Status()
+            storages = {}
+            # LEAD WORKER receives tasks from masters and submits them to the executor
+            while True:
+                msg = _comm_recv(comm_admin, source=MPI.ANY_SOURCE, tag=t_master2lead, status=status_)
+                if msg != p_kill: # Submit tasks
+                    # Get index, tasks, master (source of message)
+                    index, tasks = msg
+                    master = status_.Get_source()
+                    # Prepare storage space for results
+                    if index not in storages:
+                        storages[index] = {'lock': threading.Lock()}
+                    storage = storages[index]
+                    with storage['lock']:
+                        storage.update({'length': len(tasks), 'results': []})
+                    # Callback to store result and send results back to master
+                    callback = partial(_processOneResult, master=master, tag=index, storage=storage, \
+                                       comm=comm_admin)
+                    for task in tasks: # Submit and add callback
+                        future = executor.submit(_runOneTask, task, stdout, dbg)
+                        future.add_done_callback(callback)
+                else: # Wait all workers and shutdown executor
+                    break
 
 # ------------------------------------------------------------------------------
-def runtasks_killsignal(comm_world, comm_master):
+def runtasks_killsignal(comm_admin, comm_master):
     '''
     When the program is finished, send a signal to all workers in the worker
     pool to break their loop and exit.
 
     Args:
-        comm_world (MPI.Intracomm, int): The MPI communicator COMM_WORLD
-        comm_world (MPI.Intracomm, int): The MPI communicator for masters
+        comm_admin (MPI.Intracomm, int): The MPI communicator for administrators
+                                         (lead worker and masters)
+        comm_master (MPI.Intracomm, int): The MPI communicator for masters
     '''
     # Sync up masters before beginning the finalize process
     comm_master.Barrier()
 
-    # nr_workers = total_processes - nr_masters - 1_lead_worker
     rank_master, commsize_master = pynfam_mpi_traits(comm_master)
-    commsize_world = comm_world.Get_size()
-    nr_workers = commsize_world - commsize_master - 1
 
-    # Send 1 kill signal for each worker to the lead
+    # Send kill signal
     if rank_master == 0:
-        for i in range(nr_workers):
-            comm_world.send(p_kill, dest=0, tag=t_master2lead)
+        comm_admin.send(p_kill, dest=0, tag=t_master2lead)
 
 # ------------------------------------------------------------------------------
 def pynfam_mpi_traits(Comm):
@@ -320,6 +332,14 @@ def pynfam_abort(Comm=None, msg=u"Abort was called."):
     print(u" ************************************************** ")
     print()
     sys.stdout.flush()
+
+    print(file=sys.stderr)
+    print(u" ************************************************** ", file=sys.stderr)
+    print(u"  ERROR raised:", file=sys.stderr)
+    for m in msg: print(u"    "+str(m), file=sys.stderr)
+    print(u" ************************************************** ", file=sys.stderr)
+    print(file=sys.stderr)
+    sys.stderr.flush()
 
     if do_mpi:
         Comm.Abort()

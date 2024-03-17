@@ -51,7 +51,12 @@ class lsLogger(object):
 
         # Write the data titles/values
         if float_fmt is not None:
-            float_format = lambda x: float_fmt.format(x)
+            # float_format = lambda x: float_fmt.format(x)
+            def float_format(x):
+                x_str = float_fmt.format(x)
+                if (x != 0.0) and (float(x_str) == 0.0): # avoid precision lost
+                    x_str = u'{:.6e}'.format(x)
+                return x_str
         else:
             float_format = None
 
