@@ -1,0 +1,17 @@
+#!/bin/bash --login
+########## SBATCH Lines for Resource Request ##########
+ 
+#SBATCH --time=24:00:00             # limit of wall clock time - how long the job will run (same as -t)
+#SBATCH --nodes=4-10                 # number of different nodes - could be an exact number or a range of nodes (same as -N)
+#SBATCH --ntasks=110                  # number of tasks - how many tasks (nodes) that you require (same as -n)
+#SBATCH --cpus-per-task=1           # number of CPUs (or cores) per task (same as -c)
+#SBATCH --mem-per-cpu=4G            # memory required per allocated CPU (or core) - amount of memory (in bytes)
+#SBATCH --job-name pounders_GT      # you can give your job a name for easier identification (same as -J)
+#SBATCH -A ptg                  # ptg buy-in node
+ 
+########## Command Lines for Job Running ##########
+  
+srun -n 110 python pynfam_pounders_GT.py
+
+scontrol show job $SLURM_JOB_ID     ### write job information to SLURM output file
+js -j $SLURM_JOB_ID                 ### write resource usage to SLURM output file (powetools command)

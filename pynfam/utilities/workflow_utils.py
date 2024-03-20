@@ -263,7 +263,11 @@ def pynfam_init(pynfam_inputs, override_settings):
 
     # FAM active?
     do_fam = True
-    if (ctr_type is None) or (not get_fam_ops(fam_ops_in, beta_type)):
+    def check_op(x, b):
+        x_list = x if isinstance(x, list) else [x]
+        b_list = b if isinstance(b, list) else [b]
+        return any([get_fam_ops(op, btype) for op, btype in zip(x_list, b_list)])
+    if (ctr_type is None) or (not check_op(fam_ops_in, beta_type)):
         do_fam = False
         warn.append(u"No FAM contour or operators requested.\n"\
                     u"    Calculation will stop after hfb.")
