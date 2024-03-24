@@ -6,3 +6,4 @@ __pycache__/
 *.o
 /scratch
 /tests
+/fit_tests

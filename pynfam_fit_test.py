@@ -23,5 +23,5 @@ if __name__ == '__main__':
     # nr_points is set to a small number below for a quick test
     # g0p, g1p, h0p, vpair_t0 are fitting variables
     override_setts = {'g0p':1.6, 'g1p':0.0, 'h0p':0.0, 'vpair_t0_scaled':-1.7, 'nr_points':6}
-    result = pynfam_fit_wrapper(input_data=filename, check=check, override_setts_fit=override_setts)
+    result = pynfam_fit_wrapper(input_data=filename, check=check, override_setts_fit=override_setts, scratch_dir='./fit_tests')
     print(result)

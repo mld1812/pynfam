@@ -932,8 +932,8 @@ def pynfam_fit_wrapper_root(input_data, categories, override_setts_fit, override
             'dripline_mode'  : 0,
             'ignore_nonconv' : ignore_hfb_nonconv[ind],
             'gs_def_scan'    : (-2, (-0.2,0.0,0.2)),
-            'retry_nonconv'  : True,
-            'extra_inputs'   : ()
+            'retry_nonconv'  : True
+            #'extra_inputs'   : ()
             },
         'fam_mode': {
             'fam_contour'       : None,
@@ -1057,7 +1057,7 @@ def pynfam_fit_wrapper_root(input_data, categories, override_setts_fit, override
             if mu.do_mpi:
                 pynfam_inputs, override_settings, check = comm.bcast((pynfam_inputs, override_settings, check), root=rank)
             printf('Call of pynfam_mpi_calc (HFB part) for', category, 'starts at', datetime.datetime.now())
-            pynfam_mpi_calc(pynfam_inputs, override_settings, check, comm)
+            pynfam_mpi_calc(pynfam_inputs, override_settings, check)
             printf('Call of pynfam_mpi_calc (HFB part) for', category, 'finishes at', datetime.datetime.now())
             # read info from hfb calcs (again)
             all_hfb_OK, functional_info, lambda_n, lambda_p, pair_gap_n, pair_gap_p = read_hfb(dir_path, len(data))
@@ -1197,7 +1197,9 @@ def pynfam_fit_wrapper_root(input_data, categories, override_setts_fit, override
             if mu.do_mpi:
                 pynfam_inputs, override_settings, check = comm.bcast((pynfam_inputs, override_settings, check), root=rank)
             printf('Call of pynfam_mpi_calc (FAM part) for', category, 'starts at', datetime.datetime.now())
-            pynfam_mpi_calc(pynfam_inputs, override_settings, check, comm)
+            #print(pynfam_inputs)
+            #print(override_settings)
+            pynfam_mpi_calc(pynfam_inputs, override_settings, check)
             printf('Call of pynfam_mpi_calc (FAM part) for', category, 'finishes at', datetime.datetime.now())
         
         if check: continue # finish check

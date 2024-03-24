@@ -10,7 +10,6 @@ import inspect
 import tarfile
 import pkg_resources
 import numpy as np
-from math import ceil
 # ----------- Relative Imports -------------
 from ..fortran.hfbtho_run   import hfbthoRun
 from ..fortran.pnfam_run    import pnfamRun
@@ -23,9 +22,6 @@ from .mpi_utils             import pynfam_warn
 
 __version__ = u'2.0.0'
 __date__    = u'2019-07-26'
-
-# Maximum allowed value of nthreads_per_calc
-sup_max_threads = 150
 
 # ------------------------------------------------------------------------------
 def pynfam_input_check(pynfam_inputs):
@@ -46,14 +42,11 @@ def pynfam_input_check(pynfam_inputs):
     # Unpack dicts for convenience
     dirs          = pynfam_inputs[u'directories']
     nr_masters    = pynfam_inputs[u'nr_parallel_calcs']
-    max_threads   = pynfam_inputs.get(u'nthreads_per_calc',None) # backward compatibility
     rerun         = pynfam_inputs[u'rerun_mode']
 
     dripline      = pynfam_inputs[u'hfb_mode'][u'dripline_mode']
     gs_def_scan   = pynfam_inputs[u'hfb_mode'][u'gs_def_scan']
     ignore_nc     = pynfam_inputs[u'hfb_mode'][u'ignore_nonconv']
-    retry_nc      = pynfam_inputs[u'hfb_mode'].get(u'retry_nonconv',True) # backward compatibility
-    ex_inputs     = pynfam_inputs[u'hfb_mode'].get(u'extra_inputs',()) # backward compatibility
 
     beta_type     = pynfam_inputs[u'fam_mode'][u'beta_type']
     fam_ops_in    = pynfam_inputs[u'fam_mode'][u'fam_ops']
@@ -61,7 +54,6 @@ def pynfam_input_check(pynfam_inputs):
 
     fam_ops_in_list = fam_ops_in if isinstance(fam_ops_in, list) else [fam_ops_in]
     gs_def_scan_list = gs_def_scan if isinstance(gs_def_scan, list) else [gs_def_scan]
-    ex_inputs_list = ex_inputs if isinstance(ex_inputs, list) else [ex_inputs]
     beta_type_list = beta_type if isinstance(beta_type, list) else [beta_type]
 
     # Format the ctr_type
@@ -75,27 +67,14 @@ def pynfam_input_check(pynfam_inputs):
         err.append(u"Invalid input for directories. Must be text.")
     if nr_masters is not None and not (isinstance(nr_masters, int) and nr_masters>=0):
         err.append(u"Invalid input for nr_parallel_calcs. Must be positive integer or None")
-    if max_threads is not None and not (isinstance(max_threads, int) and max_threads>=0):
-        err.append(u"Invalid input for nthreads_per_calc. Must be positive integer or None")
     if rerun not in [0,1,2]:
         err.append(u"Invalid input for rerun_mode. Options are [0,1,2].")
     if abs(dripline) not in [0,1,2]:
         err.append(u"Invalid input for dripline_mode. Options are [0,+/-1,+/-2].")
     if ignore_nc not in [0,1,2,3]:
         err.append(u"Invalid input for ignore_nonconv. Options are [0,1,2,3].")
-    if retry_nc not in [True, False]:
-        err.append(u"Invalid input for retry_nonconv. Options are [True,False].")
-    if ex_inputs_list:
-        for ex_inputs in ex_inputs_list:
-            if not isinstance(ex_inputs, tuple):
-                err.append(u"Invalid form for ex_inputs. Expected tuple.")
-            elif ex_inputs:
-                if not all([os.path.isfile(f) for f in ex_inputs]):
-                    err.append(u"Invalid input for ex_inputs. File not found.")
-        if len(ex_inputs_list) == 1:
-            pynfam_inputs[u'hfb_mode'][u'extra_inputs'] = ex_inputs_list[0]
-    else:
-        err.append(u"Invalid input for extra_inputs. Empty list.")
+    #if beta_type not in [u'+', u'-', u'c']:
+    #    err.append(u"Invalid input for beta_type. Options are ['+','-','c'].")
     if beta_type_list:
         for beta_type in beta_type_list:
             if beta_type not in [u'+', u'-', u'c']:
@@ -104,6 +83,17 @@ def pynfam_input_check(pynfam_inputs):
             pynfam_inputs[u'beta_type'] = beta_type_list[0]
     else:
         err.append(u"Invalid input for beta_type. Empty list.")
+
+    #if not (isinstance(gs_def_scan, tuple) and len(gs_def_scan)==2):
+    #    err.append(u"Invalid form for gs_def_scan. Expected tuple of length 2.")
+    #else:
+    #    if not isinstance(gs_def_scan[0],int) or not isinstance(gs_def_scan[1],tuple):
+    #        err.append(u"Invalid types for gs_def_scan elements. Expected (int, tuple).")
+    #    elif abs(gs_def_scan[0]) not in [0,1,2]:
+    #        err.append(u"Invalid input for gs_def_scan[0]. Options are [0,+/-1,+/-2].")
+    # Format def scan (if kickoff != 0, but tuple is empty, turn off scan)
+    #if not gs_def_scan[1]:
+    #    pynfam_inputs[u'hfb_mode'][u'gs_def_scan'] = (0, ())
     if gs_def_scan_list:
         for ind, gs_def_scan in enumerate(gs_def_scan_list):
             if not (isinstance(gs_def_scan, tuple) and len(gs_def_scan)==2):
@@ -121,19 +111,20 @@ def pynfam_input_check(pynfam_inputs):
             pynfam_inputs[u'hfb_mode'][u'gs_def_scan'] = gs_def_scan_list[0]
     else:
         err.append(u"Invalid input for gs_def_scan. Empty list.")
+
+    #if not isinstance(fam_ops_in, (tuple,str)):
+    #    err.append(u"Invalid input for fam_ops. See documentation.")
     if fam_ops_in_list:
         for fam_ops_in in fam_ops_in_list:
             if not isinstance(fam_ops_in, (tuple,str)):
                 err.append(u"Invalid input for fam_ops. See documentation.")
         if len(fam_ops_in_list) == 1:
             pynfam_inputs[u'fam_mode'][u'fam_ops'] = fam_ops_in_list[0]
-    else:
-        err.append(u"Invalid input for fam_ops. Empty list.")
-
     # Check contour type
     ctr_options = [k for k in list(DEFAULTS[u'ctr'].keys()) if k != u'INTERVAL']+[None]
     if ctr_type not in ctr_options:
         err.append(u"Invalid input for ctr_type. See documentation for options.")
+
 
 
     return err
@@ -178,7 +169,7 @@ def pynfam_override_check(pynfam_inputs, override_settings):
                     err.append(u"Invalid contour bounds. Must be real.")
         if "half_width" in list(ctr_set.keys()):
             hw = np.array(ctr_set["half_width"])
-            if ((np.logical_not(np.isreal(hw)))&(np.abs(hw.real)>1e-10)).any():
+            if ((np.logical_not(np.isreal(hw)))&(abs(hw.real)>1e-10)).any():
                 err.append(u"Invalid input for contour setting 'half_width'. Must be real or imaginary.")
 
     # Check the psi_approx type is one that's programmed
@@ -326,9 +317,6 @@ def pynfam_mpi_init(pynfam_inputs, nr_calcs, comm, check):
     nr_masters = pynfam_inputs[input_name]
     rerun      = pynfam_inputs[u'rerun_mode']
 
-    input_name_t = u'nthreads_per_calc'
-    max_threads  = pynfam_inputs.get(input_name_t,None) # backward compatibility
-
     # Set nr_masters here if nr_parallel_calcs is set to use defaults or inconsistent.
     warn_str = None
     if nr_masters:
@@ -336,43 +324,15 @@ def pynfam_mpi_init(pynfam_inputs, nr_calcs, comm, check):
             warn_str = u"Supplied {:}={:}, but nr_calcs={:}. Using {:}={:}."
             warn_str = warn_str.format(input_name, nr_masters, nr_calcs, input_name, nr_calcs)
             nr_masters = nr_calcs
-        elif comm_size == 1 and nr_masters > 1: #Serial
+        elif comm_size == 1 and nr_masters > 1:
             warn_str = u"Supplied {:}={:} for serial calculation. Using {:}=1."
             warn_str = warn_str.format(input_name, nr_masters, input_name)
             nr_masters = 1
     else:
         # False type (False, None, 0) invokes default value without warning message
-        if comm_size == 1: # Serial
-            warn_str = u"Default value of {:} is 1 for serial calculation."
-            warn_str = warn_str.format(input_name)
-            nr_masters = 1
-        else: # Determine nr_masters from max_threads
-            nr_masters = ceil(nr_calcs / min(sup_max_threads, max_threads if max_threads else sup_max_threads))
-            warn_str = u"Default value of {:} is {:}."
-            warn_str = warn_str.format(input_name, nr_masters)
+        nr_masters = nr_calcs
     if warn_str: warn.append(warn_str)
 
-    # Set max_threads here if nthreads_per_calc is set to use defaults
-    warn_str = None
-    if max_threads:
-        if max_threads > sup_max_threads:
-            warn_str = u"Supplied {:}={:} is too large. Using {:}={:}."
-            warn_str = warn_str.format(input_name_t, max_threads, input_name_t, sup_max_threads)
-            max_threads = sup_max_threads
-        if comm_size == 1 and max_threads > 1: # Serial
-            warn_str = u"Supplied {:}={:} for serial calculation. Using {:}=1."
-            warn_str = warn_str.format(input_name_t, max_threads, input_name)
-            max_threads = 1
-    else:
-        if comm_size == 1: # Serial
-            warn_str = u"Default value of {:} is 1 for serial calculation."
-            warn_str = warn_str.format(input_name_t)
-            max_threads = 1
-        else: # Determine max_threads from nr_masters
-            max_threads = min(ceil(nr_calcs/nr_masters), sup_max_threads)
-            warn_str = u"Default value of {:} is {:}."
-            warn_str = warn_str.format(input_name_t, max_threads)        
-    if warn_str: warn.append(warn_str)
 
     # Split into master/worker groups
     if comm_size > 1 and rerun == 2:
@@ -383,24 +343,20 @@ def pynfam_mpi_init(pynfam_inputs, nr_calcs, comm, check):
     elif comm_size > 1:
         stdout = False
 
-        if rank in range(0,nr_masters+1):
-            group = 0 # Masters and lead worker (administrators), ranks 0 to nr_masters
-        else:
-            group = 1 # Non-lead Workers (employees)
-        comm_admin_employee = comm.Split(group,1)
-
         if rank in range(1,nr_masters+1):
             group = 0 # Masters, ranks 1 to nr_masters
         else:
             group = 1 # Workers, with world rank 0 as leader
-        comm_master_worker = comm.Split(group,1)
+
+        newcomm = comm.Split(group,1)
 
         # Check we have enough resources
         nr_workers = comm_size - nr_masters - 1
-        if nr_workers <= 0 and not check:
-            err.append(u"Too few mpi processes reserved. Must have: "+\
-                       u"({:}={:})".format(input_name, nr_masters)+\
-                       u" + (1 lead worker) < (comm_size={:}).".format(comm_size))
+        if nr_workers <= nr_masters and not check:
+            e1=u"Too few mpi process reserved. Must have at least 1 worker per parallel calc + 1 lead worker"
+            e2=u"Requested: {:}={:}, comm_size={:} --> available_workers={:}".format(input_name, nr_masters, comm_size, nr_workers)
+            err.append(e1)
+            err.append(e2)
         # Warn if nr_workers ~ nr_masters
         if nr_workers <= nr_masters*1.5:
             warn_str = u"Number of worker processes ({:}) is close to number of"+\
@@ -409,14 +365,12 @@ def pynfam_mpi_init(pynfam_inputs, nr_calcs, comm, check):
     else:
         stdout = True
         group = 0
-        comm_master_worker = comm
-        comm_admin_employee = comm
-
+        newcomm = 1
 
     if check:
         warn.append(u"nr_calcs = {:}".format(nr_calcs))
 
-    return err, warn, comm_master_worker, comm_admin_employee, group, max_threads, stdout
+    return err, warn, newcomm, group, stdout
 
 # ------------------------------------------------------------------------------
 def pynfam_init_dirs(pynfam_inputs):
@@ -582,7 +536,10 @@ def get_fam_ops(key, beta_type):
             return []
         op = key[0].upper()
         kval = key[1]
-
+        # make it possible to constrain kval for wrapper keys
+        if op in keys: key = op
+    
+    if isinstance(key, tuple):
         try:
             j = fam_ops[op][0]
         except KeyError:

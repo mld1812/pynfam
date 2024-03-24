@@ -8,7 +8,7 @@ default_setts = {
         'fam_ops': 'ALL'
     },
     'hfb':  {
-        'number_of_shells': 20,
+        'number_of_shells': 6,
         'accuracy': 1e-06,
         'restart_file': 1,
         'number_iterations': 300,
