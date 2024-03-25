@@ -67,6 +67,7 @@ module hfb_solution
    use hfbtho, only : hfb_use_j2terms => use_j2terms !> j^2 terms active in the functional?
    use hfbtho, only : hbzero !> \hbar^2/(2m_nucleon)
    use hfbtho, only : rho_nm !> nuclear matter density
+   use hfbtho, only : rho_c  !> saturation density used in the pairing functional
 
    ! Statistical FAM (finite-temp or EFA)
    use hfbtho, only : ft_active => switch_on_temperature !> Is T>0 and active in HFB calculation
@@ -115,7 +116,7 @@ module hfb_solution
    integer(ipr), allocatable, target :: pwi_uv_n(:), pwi_uv_p(:) !> Vectorized matrix index for active QP index i
       !> E.g. V(ima) = V(pwi_uv_q(k)+ia); V(imb) = V(pwi_uv_q(k) + ib). In HFBTHO: KqpQ(kl).
    logical(ipr), allocatable, target :: pwi_active_n(:), pwi_active_p(:) !> Boolean indicating if QP is below pwi.
-   integer(ipr), allocatable :: num_spin_up(:) !> Number of basis states with spin up in each block
+   integer(ipr), allocatable :: num_spin_up(:), num_spin_dw(:) !> Number of basis states with spin up / dw in each block
    integer, allocatable :: new_order(:)
 
    ! HFB Result and Functional
@@ -307,8 +308,8 @@ contains
       !-------------------------------------------------------------------------
       ! Sort: put states with ns==1 at the beginning and those with ns==-1 at the end in each block
       ! The i-th element of array "new_order" gives the index of wf that should be put at position i
-      If(Allocated(num_spin_up)) Deallocate(num_spin_up)
-      allocate(num_spin_up(hnb))
+      If(Allocated(num_spin_up)) Deallocate(num_spin_up,num_spin_dw)
+      allocate(num_spin_up(hnb),num_spin_dw(hnb))
       If(Allocated(new_order)) Deallocate(new_order)
       allocate(new_order(hdqp))
       new_order = 0; num_spin_up = 0
@@ -330,6 +331,7 @@ contains
          end do
          im = im + hdb(ib)
       end do
+      num_spin_dw(:) = hdb(:) - num_spin_up(:)
       nr(:) = nr(new_order); nz(:) = nz(new_order); nl(:) = nl(new_order)
       ns(:) = ns(new_order); npar(:) = npar(new_order)
       wf(:,:) = wf(:,new_order)
@@ -348,6 +350,7 @@ contains
          wfdp(:,i) = y(:)*nl(i)*wf(:,i)
          wfd2_all(:,i) = wfd2(:,i) - y(:)*nl(i)*wfdp(:,i)
       end do
+      deallocate(wfd2)
 #endif
 #endif
 

@@ -39,7 +39,7 @@ COMPILER = ifort
 
 VERBOSE   = 0
 DEBUG     = FALSE
-USE_OPENMP= 0
+USE_OPENMP= 1
 # Turn above on with two-body currents
 
 USE_HBLAS = 1

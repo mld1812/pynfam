@@ -77,8 +77,7 @@ class famStrength(object):
         self._meta = {u'Version':u'Unknown',
                      u'Interaction':u'Unknown',
                      u'Time': None,
-                     u'Conv': None,
-                     u'Si': None}
+                     u'Conv': None}
 
 
     # File names based off of operator
@@ -134,13 +133,12 @@ class famStrength(object):
         return len([c for c in self.str_df.columns[2:] if u'Re' in c])
     @property
     def meta(self):
-        """ meta (dict): Meta data for the output header. Includes conv, time and si
+        """ meta (dict): Meta data for the output header. Includes conv and time
         for every fam point from the meta_df attribute.
         """
         if self.meta_df is not None:
             self._meta[u'Conv']=self.concatFamConv(list(self.meta_df[u'Conv'].values))[0]
             self._meta[u'Time']=self.concatFamTime(list(self.meta_df[u'Time'].values))[0]
-            self._meta[u'Si']=self.concatFamSi(list(self.meta_df[u'Si'].values))[0]
         return self._meta
 
     @property
@@ -233,8 +231,6 @@ class famStrength(object):
             fam_pt.label = os.path.join(fam_rep.label, str(i).zfill(6))
             fam_pt.tmp_inputs.append(os.path.join(paths.hfb, hfbthoRun.file_bin))
             fam_pt.tmp_inputs.append(os.path.join(paths.hfb, hfbthoRun.file_nml))
-            fam_pt.tmp_inputs.extend([os.path.join(paths.hfb, os.path.basename(f)) \
-                                      for f in paths.extra_inputs])
             # Two body currents: If tbc file exists, use it as tmp input
             if fam_pt.nml[u'EXT_FIELD']['two_body_current_mode']:
                 tbc_input = os.path.join(paths.hfb, u'{:}.tbc'.format(self.opname))
@@ -413,25 +409,6 @@ class famStrength(object):
         return conv, conv_list
 
     #--------------------------------------------------------------
-    def concatFamSi(self, fam_list):
-        """
-        Get the si (accuracy) data from a list of pnfamRun solutions.
-
-        Args:
-            fam_list (list of pnfamRun or str): List to be compiled.
-
-        Returns:
-            ndarray: The si for each pnfamRun.
-        """
-        if all(isinstance(f,pnfamRun) for f in fam_list):
-            si_list = [f.soln_dict[u'Si'] for f in fam_list]
-        else:
-            si_list = fam_list
-        si_arr = np.array(si_list)
-        si_max = si_arr.max()
-        return si_max, si_arr
-
-    #--------------------------------------------------------------
     def getMeta(self, data):
         """
         Get the meta data for output header from pnfam solutions. Store
@@ -454,14 +431,12 @@ class famStrength(object):
         # Assume list of fam objects
             conv_list = self.concatFamConv(data)[1]
             time_list = self.concatFamTime(data)[1]
-            si_list = self.concatFamSi(data)[1]
             version = data[0].soln_dict[u'Version']
         elif isinstance(data, str):
         # Assume path to op.out file and parse
             sop = strengthOutParser(data)
             conv_list = sop.getAllConv()
             time_list = sop.getAllTime()
-            si_list = sop.getAllSi()
             version = sop.getVersion()
             err = sop.err
         else:
@@ -469,30 +444,8 @@ class famStrength(object):
 
         # Set the (potentially error) values
         self.meta[u'Version'] = version
-        self.meta_df = pd.DataFrame({u'Time':time_list, u'Conv':conv_list, u'Si':si_list})
+        self.meta_df = pd.DataFrame({u'Time':time_list, u'Conv':conv_list})
         if err: raise IOError(sop.err_msg)
-
-        # Fill in missing points
-        if len(time_list) != self.contour.nr_points:
-            endpoints  = self.contour.ctr_z[0] == self.contour.ctr_z[-1]
-            nr_compute = self.contour.nr_compute
-            nr_points  = self.contour.nr_points
-
-            # flip row order and copy
-            sym_meta_df = self.meta_df.iloc[::-1].copy()
-
-            # avoid double counting the last point if nr_points is odd
-            if nr_compute*2 != nr_points:
-                sym_meta_df.drop(sym_meta_df.head(1).index, inplace=True)
-            
-            # Fudge endpoints if its the same point (e.g. evenly spaced grid)
-            if endpoints and nr_points != 1:
-                sym_meta_df.iloc[-1] = self.meta_df.iloc[0].values
-            
-            # zero time in sym_meta_df
-            sym_meta_df[u'Time'] = 0.0
-            
-            self.meta_df = pd.concat([self.meta_df, sym_meta_df], axis=0, ignore_index=True)
 
     #--------------------------------------------------------------
     def concatFamData(self, fam_list):
@@ -531,7 +484,6 @@ class famStrength(object):
                   u"# Residual interaction: {:}\n".format(self.meta[u'Interaction']),
                   u"# Operator:             {:} with K={:d}\n".format(self.op, self.k),
                   u"# Contour:              {:}\n".format(self.contour.name_and_int),
-                  u"# Max Si:               {:}\n".format(self.meta[u'Si']),
                   u"# Temperature:          {:<.6f} (Prefactor={:})\n".format(self.temperature, self.use_FT_prefactor),
                   u"#\n"]
 

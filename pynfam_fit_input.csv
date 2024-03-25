@@ -1,0 +1,30 @@
+﻿# Explanations of columns
+# label: label of nuclei, for human reading only. 
+# category: type of observable, can be "GT", "HL" or "GAP". 
+# Z: proton number
+# N: neutron number
+# A: Z+N, for human reading only. 
+# exp: experimental values (true values). 
+# energy_min and energy_max: search region for the GT resonance. Leave blank for other categories. Please feel free to tune them. 
+# half_width: imaginary part of \omega. Please feel free to tune this. 
+# de_hw_ratio: de/half_width, ratio between de and half_width. de is the grid spacing inside the search region. 
+# de_hw_ratio: (continue) For GT only. Leave blank for other categories. 
+# de_hw_ratio: (continue) For GT if it's left blank, the default value in "pynfam_fit_default.py" will be used. 
+# de_hw_ratio: (continue) Recommended value is <~ 1.0. 
+# deformation: deformation scan region. Default value (-2,(-0.2,0.0,0.2)) will be used if left blank. 
+# deformation (continue): It can be a string with S (spherical), P (prolate) and O (oblate). 
+# deformation (continue): It can also be a tuple with the form of (-2,(-0.2,0.0,0.2)). 
+# deformation (continue): If only "S" is given, only operator GT_K0 will be calculated for GT. 
+# op: operators to use. For HL only. Leave blank for other categories. 
+# op (continue): It can be 'ALL','ALLOWED','FORBIDDEN','0+','GAMOWTELLER','1+','0-','1-','2-'. 
+# op (continue): For HL if it's left blank, the default value is "ALL". 
+# op (continue): If only "ALLOWED" transitions contribute to the beta decay rate, we can set op as "ALLOWED" to reduce computations.
+# sigma: normalization factor for the residual.
+label,category,Z,N,A,exp_raw,sigma,func,energy_min,energy_max,half_width,de_hw_ratio,deformation,op
+48Ar,HL,18,30,48,0.475,,log,,,,,,Allowed
+208Pb,GT,82,126,208,15.6,1.0,,18,20,0.5,2,S,
+112Sn,GT,50,62,112,8.94,1.0,,8,9,0.5,,OSP,
+60Cr,HL,24,36,60,0.49,,log,,,,,,
+208Pb,SD,82,126,208,,,,18,20,0.5,2,S,
+112Sn,SD,50,62,112,,,,8,9,0.5,,"(0.0, -0.2)",
+126Cd,HL,48,78,126,0.515,,log,,,,,S,

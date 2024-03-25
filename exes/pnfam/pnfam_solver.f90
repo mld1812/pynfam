@@ -73,7 +73,7 @@ contains
       ! Run the iterative solver
       !---------------------------------------------------------------
       call log_header
-      call ifam
+      call ifam(iexit)
 
       ! Write the result to footer and store result
       !---------------------------------------------------------------
@@ -90,10 +90,12 @@ contains
    ! calling this the first time, the module data structures must be initialized
    ! with init_pnfam_solver.
    !---------------------------------------------------------------------------
-   subroutine ifam
+   subroutine ifam(iexit)
       use pnfam_constants, only : iu, pi, get_timer
       use pnfam_broyden
       implicit none
+
+      integer, intent(in) :: iexit
 
       ! Finite temperature
       real(dp)    :: ft_real_factor
@@ -135,7 +137,9 @@ contains
          time1 = get_timer()
          if (iter==0) timei0 = time1
 
-         if (abs(quench_residual_int) < 1e-10) then
+         if (((iter == 0) .and. (iexit > 0)) .or. (abs(quench_residual_int) < 1e-10)) then
+            ! if (1) ifam starts from scratch and iter==0 (dR==0), or (2) dH is quenched to zero, 
+            ! the calculation of dH can be skipped.
             call set_val_bbm(dHqp_im,0d0)
             call set_val_bbm(dHqp_re,0d0)
          else
@@ -225,8 +229,8 @@ contains
    !---------------------------------------------------------------------------
    subroutine init_pnfam_solver
       use pnfam_constants, only : IT_NEUTRON, IT_PROTON
-      use pnfam_broyden, only : qrpa_broin, qrpa_broout, nbroy, broyden_history_size
-
+      !use pnfam_broyden, only : qrpa_broin, qrpa_broout, nbroy, broyden_history_size
+      use pnfam_broyden, only : init_broyden
       implicit none
 
       integer :: ixterm, i
@@ -247,21 +251,21 @@ contains
 
       if (ft_active .or. hfb_blo_active) then
          use_diagonal_blocks = .true.
-         nbroy = nxy*8
+         !nbroy = nxy*8
       else
          use_diagonal_blocks = .false.
-         nbroy = nxy*4
+         !nbroy = nxy*4
       end if
 
       ! Broyden arrays
-      if (allocated(qrpa_broin)) deallocate(qrpa_broin,qrpa_broout)
-      allocate(qrpa_broin(nbroy),qrpa_broout(nbroy))
-      qrpa_broin = 0; qrpa_broout=0
-      si = 1
+      !if (allocated(qrpa_broin)) deallocate(qrpa_broin,qrpa_broout)
+      !allocate(qrpa_broin(nbroy),qrpa_broout(nbroy))
+      !qrpa_broin = 0; qrpa_broout=0
+      !si = 1
       ! Don't do broyden if no residual interaction, should just need 1 iteration
-      if (abs(quench_residual_int) < 1e-10) then
-         broyden_history_size = -1
-      end if
+      !if (abs(quench_residual_int) < 1e-10) then
+      !   broyden_history_size = -1
+      !end if
 
       !---------------------------------------------------------------------------
       ! Allocate and initialize big-blockmatrix structure
@@ -278,14 +282,14 @@ contains
       ! Stores...... : [ f_pn, _ ; _, _ ], for 2bc w/ pairing: [f11/2, f12;  f12/2,   f11 ]
       Fsp%m11 = f%mat
       ! THIS DOES NOT WORK B/C IT SPOILS THE 1 BLOCK PER ROW+COL STRUCTURE IN FQP
-      if (allocated(f%mat12%elem)) then
-         Fsp%m12 = f%mat12
-         Fsp%m21 = f%mat12
-         Fsp%m22 = f%mat
-         Fsp%m11%elem = f%mat%elem*0.5_dp
-         Fsp%m22%elem = f%mat%elem*0.5_dp
-         call set_sign_bbm(Fsp, 1d0,1d0,-1d0,-1d0)
-      end if
+      !if (allocated(f%mat12%elem)) then
+      !   Fsp%m12 = f%mat12
+      !   Fsp%m21 = f%mat12
+      !   Fsp%m22 = f%mat
+      !   Fsp%m11%elem = f%mat%elem*0.5_dp
+      !   Fsp%m22%elem = f%mat%elem*0.5_dp
+      !   call set_sign_bbm(Fsp, 1d0,1d0,-1d0,-1d0)
+      !end if
       if (allocated(g)) then
          if (allocated(Gsp)) deallocate(Gsp)
          allocate(Gsp(size(g)), Gqp(size(g)))
@@ -457,6 +461,9 @@ contains
          end if
       end if
 
+      ! Broyden arrays
+      call init_broyden(nxy, Greens_re, Greens_im)
+      
    end subroutine init_pnfam_solver
 
 
@@ -530,7 +537,12 @@ contains
             i2a = isstart(ibc) ; i2b = i2a + db(ibc) - 1
             do i2 = i2a,i2b ! true column index
             do i1 = i1a,i1b ! true row index
-               aux = a*(b*f1(i1) + c*f2(i2) + cmplx(ree,ime,dp))**d
+               !aux = a*(b*f1(i1) + c*f2(i2) + cmplx(ree,ime,dp))**d
+               if ((f1(i1) >= 0) .and. (f2(i2) >= 0)) then
+                  aux = a*(b*f1(i1) + c*f2(i2) + cmplx(ree,ime,dp))**d
+               else ! zero caused by pairing cutoff
+                  aux = 0.0_dp
+               end if
                if (re) then
                   mat%elem(ipt) = real(aux,dp)
                else
@@ -571,7 +583,7 @@ contains
       !11/5/23: since the rest of the code for the two body current mode is designed to handle the GT part, I won't mess with that and 
       !instead just carve out an exception for the P operator with two body current. also only run the two body part if operator = GT.
       !11/29: Add in two body current mode to setup_crossterms. If it's 0 then nothing should change, since set_use_2bc does nothing if it's 0.
-      if ((operator_name == 'P' .or. operator_name == 'PS0' ).and. two_body_current_mode /= 0) then
+      if ((operator_name == 'P' .or. operator_name == 'PS0' .or. operator_name == 'RS0' .or. operator_name == 'RS1' .or. operator_name == 'RS2') .and. two_body_current_mode /= 0) then
          call init_external_field(beta_type=beta_type, label=operator_name, k=operator_k, op=f, use_2bc = two_body_current_mode)
       else
          call init_external_field(beta_type=beta_type, label=operator_name, k=operator_k, op=f)

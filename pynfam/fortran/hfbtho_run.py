@@ -68,7 +68,6 @@ class hfbthoRun(fortProcess):
         self.soln_err = False
         self.soln_err_msg = u''
         self.core_rundir = None
-        self.pmt_inputs.extend(paths.extra_inputs)
 
         # Allow specifying beta+ or beta-. If None then both are stored in log.
         self.beta = beta_type
@@ -716,7 +715,7 @@ class hfbthoRun(fortProcess):
         """
 
         # Returns stdout, stderr.
-        stdout, err = fortProcess.runExe(self, stdout_bool=stdout_bool, stdout_return=True, debug=debug)
+        stdout, err = fortProcess.runExe(self, stdout_bool=stdout_bool, debug=debug)
 
 
         # For Q-val, we need the QP info from thoout.dat not included in stdout

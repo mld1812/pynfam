@@ -666,7 +666,48 @@ contains
                skyrme_uses_j2_terms = .false.
 
                !rho_c = 0.156247_dp ! Override default value of 0.16 with UNEDF fit value
-              
+               
+            ! SAMI PhysRevC.86.031306
+            Case('SAMI')
+               interaction_name = 'SAMI'
+               t0  =-0.187775d+04
+               t1  = 0.4756d+03
+               t2  =-0.852d+02
+               t3  = 0.102196d+05
+               x0  = 0.320000_dp
+               x1  =-0.532000_dp
+               x2  =-0.0140000_dp
+               x3  = 0.68800_dp
+               w   = 0.1370000d+03
+               b4  = w/2.0_dp
+               b4p = 42/2.0_dp
+               alpha= 0.25614
+               tte = 0.0_dp
+               tto = 0.0_dp
+               skyrme_uses_j2_terms = .true.
+               
+            !---------------------------------------------------------------------
+            ! SAMI-T PhysRevC.99.034322
+            !---------------------------------------------------------------------
+            Case ('SAMI-T')
+               interaction_name = 'SAMI-T'
+               t0  =-0.219938d+04
+               t1  = 0.533036d+03
+               t2  =-0.881692d+02
+               t3  = 0.112935d+05
+               x0  = 0.514710_dp
+               x1  =-0.531674_dp
+               x2  =-0.026340_dp
+               x3  = 0.944603_dp
+               w   = 0.130026d+03
+               b4  = w/2.0_dp
+               b4p = 101.893/2.0_dp
+               alpha= 0.179550
+               tte = 138.48464
+               tto = -31.84384
+               skyrme_uses_j2_terms = .true.
+               skyrme_uses_extended_tensor_terms = .true.
+               
             case default
                write(st,'(1x,3a)') 'ERROR: interaction "', trim(interaction_name), '" not found.'
                call writelog(st)
