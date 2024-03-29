@@ -4,7 +4,7 @@ from pynfam import pynfam_mpi_calc
 
 pynfam_inputs = {
  'directories': {
-     'outputs' : 'Ar48_Allowed_gA=1_20shells',
+     'outputs' : 'Gd162_forbidden_k=1',
      'exes'    : './exes',
      'scratch' : './tests'
      },
@@ -22,17 +22,17 @@ pynfam_inputs = {
  'fam_mode': {
      'fam_contour': 'CIRCLE',
      'beta_type'  : '-',
-     'fam_ops'    : 'Allowed' #('P', 0)
+     'fam_ops'    : ('FORBIDDEN',1) #('P', 0)
      }
 }
 
 override_settings = {
- 'hfb' : {'proton_number'    : 18, #64, 98 - Gd162
-          'neutron_number'   : 30,
-          'number_of_shells' : 20, 
-          'number_gauss'     : 20,
-          'number_laguerre'  : 20,
-          'number_legendre'  : 40,
+ 'hfb' : {'proton_number'    : 64, #64, 98 - Gd162
+          'neutron_number'   : 98,
+          'number_of_shells' : 6, 
+          'number_gauss'     : 40,
+          'number_laguerre'  : 40,
+          'number_legendre'  : 80,
           #'functional'       : 'SKM*',
           #'force_parity'     : False
           },
@@ -64,7 +64,7 @@ override_settings = {
           },
 
  'psi' : {
- 	"GA": -1.0
+ 	#"GA": -1.0
  }
 }
 

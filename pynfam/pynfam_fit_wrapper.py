@@ -622,9 +622,9 @@ def detaildf_process_HL(output_df, spherical_flag=False, GA=None):
         # recalculate Rate and NumErr_Rate with new GA value
         output_df['Rate(s^-1)'] = output_df['Rate_*GA^0(s^-1)'] + GA * output_df['Rate_*GA^1(s^-1)'] \
                                  + GA**2 * output_df['Rate_*GA^2(s^-1)']
-        output_df['NumErr_Rate(s^-1)'] = np.sqrt(output_df['NumErrRate^2_*GA^0(s^-2)'] \
-                                        + GA**2 * output_df['NumErrRate^2_*GA^2(s^-2)'] \
-                                        + GA**4 * output_df['NumErrRate^2_*GA^4(s^-2)'])
+        #output_df['NumErr_Rate(s^-1)'] = np.sqrt(output_df['NumErrRate^2_*GA^0(s^-2)'] \
+        #                                + GA**2 * output_df['NumErrRate^2_*GA^2(s^-2)'] \
+        #                                + GA**4 * output_df['NumErrRate^2_*GA^4(s^-2)'])
 
     # calculate total rate and half life, with negative rates discarded
     allowed_names = ('Allowed-Fermi','Allowed-GT_K=0','Allowed-GT_K=1')
@@ -636,9 +636,9 @@ def detaildf_process_HL(output_df, spherical_flag=False, GA=None):
     if spherical_flag:
         # deal with spherical case: copy data of K=0 in columns given by "cols" to those of K!=0
         # the factor of 2 or 4 comes from "Tk" in shapeFactor/prepStrengths
-        cols = ['Rate(s^-1)', 'Rate_*GA^0(s^-1)', 'Rate_*GA^1(s^-1)', 'Rate_*GA^2(s^-1)', \
-                'NumErr_Rate(s^-1)', 'NumErrRate^2_*GA^0(s^-2)', 'NumErrRate^2_*GA^2(s^-2)', 'NumErrRate^2_*GA^4(s^-2)']
-        factors = (2,2,2,2,2,4,4,4)
+        cols = ['Rate(s^-1)']#, 'Rate_*GA^0(s^-1)', 'Rate_*GA^1(s^-1)', 'Rate_*GA^2(s^-1)'] #, \
+        #        'NumErr_Rate(s^-1)', 'NumErrRate^2_*GA^0(s^-2)', 'NumErrRate^2_*GA^2(s^-2)', 'NumErrRate^2_*GA^4(s^-2)']
+        factors = (2) #,2,2,2,2,4,4,4)
         for name in allowed_names + ff_names:
             if name.endswith(('Fermi', '0', '0)')):
                 continue
@@ -652,15 +652,14 @@ def detaildf_process_HL(output_df, spherical_flag=False, GA=None):
     output_df.at['Total-Forbidden', 'Rate(s^-1)'] = ff_rate = \
         output_df.loc[output_df.index.isin(ff_names) & (output_df['Rate(s^-1)']>0)]['Rate(s^-1)'].sum()
     output_df.at['Total', 'Rate(s^-1)'] = total_rate = allowed_rate + ff_rate
-
     # update other parts of output_df
     with np.errstate(divide=u'ignore', invalid=u'ignore'): # ignore 0/0 warning
         output_df.loc[rows, 'Half-Life(s)'] = np.log(2) / output_df.loc[rows, 'Rate(s^-1)']
         output_df.loc[rows, 'Log10(Half-Life)'] = np.log10(output_df.loc[rows, 'Half-Life(s)'])
-        output_df.loc[rows, 'NumErr_Half-Life(s)'] = output_df.loc[rows, 'NumErr_Rate(s^-1)'] \
-            * np.abs(output_df.loc[rows, 'Half-Life(s)'] / output_df.loc[rows, 'Rate(s^-1)'])
-        output_df.loc[rows, 'NumErr_Log10(Half-Life)'] = output_df.loc[rows, 'NumErr_Rate(s^-1)'] \
-            / np.abs(output_df.loc[rows, 'Rate(s^-1)']) / np.log(10)
+        #output_df.loc[rows, 'NumErr_Half-Life(s)'] = output_df.loc[rows, 'NumErr_Rate(s^-1)'] \
+        #    * np.abs(output_df.loc[rows, 'Half-Life(s)'] / output_df.loc[rows, 'Rate(s^-1)'])
+        #output_df.loc[rows, 'NumErr_Log10(Half-Life)'] = output_df.loc[rows, 'NumErr_Rate(s^-1)'] \
+        #    / np.abs(output_df.loc[rows, 'Rate(s^-1)']) / np.log(10)
         output_df.at[u'%FF', 'Rate(s^-1)'] = ff_rate / total_rate * 100 # percentage of first-forbidden rate
 
 
@@ -708,10 +707,10 @@ def df_func_residual(category_df, sigma_func_warning=True, category='the whole t
                 printf('Warning: Unsupported func found in category', category, '! Fall back to identity function.')
         fun_model_results.append(fun(category_df['model_raw'].iat[ii]))
         fun_exp.append(fun(category_df['exp_raw'].iat[ii]))
-        fun_num_errors.append(np.abs(derivative(category_df['model_raw'].iat[ii]))*category_df['num_error_raw'].iat[ii])
+        #fun_num_errors.append(np.abs(derivative(category_df['model_raw'].iat[ii]))*category_df['num_error_raw'].iat[ii])
     category_df['exp'] = fun_exp
     category_df['model'] = fun_model_results
-    category_df['num_error'] = fun_num_errors
+    #category_df['num_error'] = fun_num_errors
     category_df['residual'] = category_df['model'] - category_df['exp']
     category_df['norm_res'] = category_df['residual'] / category_df['sigma']
 
@@ -817,7 +816,7 @@ def pynfam_fit_wrapper_nonroot(comm, root_rank):
         val = comm.bcast(val, root=root_rank) # receive parameters from root
         if isinstance(val, tuple):
             # run pynfam
-            pynfam_mpi_calc(*val, comm)
+            pynfam_mpi_calc(*val)
         else:
             # return what's broadcasted
             return val
@@ -1208,7 +1207,7 @@ def pynfam_fit_wrapper_root(input_data, categories, override_setts_fit, override
         soln_dir = 'beta_soln'
         detail_dir = 'fam_soln'
         if category == 'GT': # Gamow-Teller resonance
-            output_filename = 'totalGT_str.out'
+            output_filename = 'gamow_teller.out'
             column_name = 'Total-GT'
             detail_fnmatch = 'GT-K[0-1].out'
         elif category == 'SD': # spin-dipole resonance
@@ -1251,7 +1250,7 @@ def pynfam_fit_wrapper_root(input_data, categories, override_setts_fit, override
                 output_df = pd.read_csv(output_path, delim_whitespace=True, header=0, comment=u'#', index_col=0)
                 detaildf_process_HL(output_df, hfb_gs_def_scan[num] == (-2, (0.0,)))
                 model_results.append(output_df.at['Total', column_name])
-                num_errors.append(output_df.at['Total', 'NumErr_'+column_name])
+                #num_errors.append(output_df.at['Total', 'NumErr_'+column_name])
 
             elif category == 'GAP': # pairing gap
                 if 'op' in data.columns:
@@ -1296,10 +1295,10 @@ def pynfam_fit_wrapper_root(input_data, categories, override_setts_fit, override
         # save results into all_model_results and write it onto disk
         category_df = deepcopy(data)
         category_df['model_raw'] = model_results
-        category_df['num_error_raw'] = num_errors
+        #category_df['num_error_raw'] = num_errors
         df_func_residual(category_df, category) # apply func and calculate residuals
         category_df['convergence'] = conv_info
-        category_df['max_fam_si'] = maxsi_info
+        #category_df['max_fam_si'] = maxsi_info
         category_df['detail'] = output_dfs
         all_model_results.append(category_df)
         csv_cols = [col for col in category_df.columns if col != 'detail']

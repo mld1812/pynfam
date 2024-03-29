@@ -336,6 +336,7 @@ def pynfam_calc(index, index2, pynfam_inputs, override_settings, comm, do_fam, s
                     results_beta_rates(mgr, shapefacs, closed, rates_df, zero_neg=False, subdir=lab)
                     results_shape_factor(mgr, shapefacs, closed, write_psi=True, subdir=lab)
                     results_bare_strength(mgr, shapefacs, closed, btot_df=btot_df, subdir=lab)
+                    calc_spin_dipole_results(mgr, shapefacs, closed, subdir=lab)
                     write_beta_log(mgr, shapefacs, rates_df, hfb_gs, psi_log, subdir=lab)
 
                     # Calculate and write adjusted outputs (written to beta_meta).
