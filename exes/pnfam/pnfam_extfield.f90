@@ -855,7 +855,7 @@ contains
             !if (present(use_2bc)) then
             !   call init_external_field(cbeta(ibeta), label='P', k=op%k, op=crossterms(ixterm), use_2bc = use_2bc)
             !else
-            call init_external_field(cbeta(ibeta), label='P', k=op%k, op=crossterms(ixterm))
+            call init_external_field(cbeta(ibeta), label='P', k=op%k, op=crossterms(ixterm), use_2bc = use_2bc)
             !end if 
             crossterms(ixterm)%label = trim(op%label)//'x'//trim(crossterms(ixterm)%label)
          end if

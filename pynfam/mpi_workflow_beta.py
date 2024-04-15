@@ -131,7 +131,7 @@ def results_bare_strength(mgr, shapefacs, ctr_closed, btot_df=None, subdir=u''):
     genops = shapefacs.genops
 
     # Bare Gamow-Teller strength (GTK0 + 2GTK1). Writes BGT vs E and sum(BGT) vs E
-    if not ctr_closed and (u'GT_K0' in genops and u'GT_K1' in genops):
+    if not ctr_closed and (u'GT_K0' in genops or u'GT_K1' in genops):
         gt_str = shapefacs.calcTotalGT(zero_neg=zero_neg)
         # Update E 1st peak to be for GT, not PSWSF, for file header
         if shapefacs.is_raw:

@@ -3,7 +3,7 @@
 # They can be overwritten by "setts_fit" in pynfam_fit
 default_setts = {
     'hfb':  {
-        'number_of_shells': 20,
+        'number_of_shells': 6,
         'accuracy': 1e-06,
         'restart_file': 1,
         'number_iterations': 300,

@@ -1183,15 +1183,18 @@ class shapeFactor(phaseSpace):
         """
 
         genop_list = list(self.strengths.keys())
-        if u'GT_K0' not in genop_list or u'GT_K1' not in genop_list:
+        if u'GT_K0' not in genop_list and u'GT_K1' not in genop_list:
             raise RuntimeError(u"Missing GT strength for calcTotalGT")
 
         gt_df = pd.DataFrame(columns=[u'Re(EQRPA)', u'Im(EQRPA)'])
         gt_df[u'Re(EQRPA)'] = np.real(self.contour.ctr_z)
         gt_df[u'Im(EQRPA)'] = np.imag(self.contour.ctr_z)
 
-        gt0 = np.imag(self.strengths[u'GT_K0'].cstr_df[u'Strength'].values)
-        gt1 = np.imag(self.strengths[u'GT_K1'].cstr_df[u'Strength'].values)
+        gt0 = 0; gt1 = 0
+        if u'GT_K0' in genop_list:
+            gt0 = np.imag(self.strengths[u'GT_K0'].cstr_df[u'Strength'].values)
+        if u'GT_K1' in genop_list:
+            gt1 = np.imag(self.strengths[u'GT_K1'].cstr_df[u'Strength'].values)
 
         gt_df[u'Total-GT'] = gt0 + 2.0*gt1
         if zero_neg:

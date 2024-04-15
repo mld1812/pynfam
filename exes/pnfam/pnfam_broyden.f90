@@ -21,81 +21,14 @@ module pnfam_broyden
 
    real(dp), allocatable, target :: qrpa_broin(:), qrpa_broout(:)
 
-   integer, allocatable :: sep_points(:) ! Separation points in qrpa_broout for different dRqp
-   integer, allocatable :: corr(:) ! From qrpa_broin or qrpa_broout index to dRqp index
-
 contains
-
-   !---------------------------------------------------------------------------
-   ! Initialize Broyden's method
-   ! dRqp not contributing to dRsp due to zeros in Gre and Gim
-   ! resulted from pairing cutoff not be stored in the Broyden vector. 
-   !---------------------------------------------------------------------------
-   subroutine init_broyden(nxy, Gre, Gim)
-      implicit none
-      integer, intent(in) :: nxy ! Number of elements in f%mat_n%elem or f%mat_p%elem
-      type(bigblockmatrix), intent(in) :: Gre, Gim
-
-      integer :: inc
-
-      if (allocated(qrpa_broin)) deallocate(qrpa_broin,qrpa_broout,sep_points,corr)
-
-      if (allocated(Gre%m11%elem)) then
-         allocate(sep_points(8), corr(nxy*8))
-      else
-         allocate(sep_points(4), corr(nxy*4))
-      end if
-
-      ! Initialize corr and sep_points
-      inc = 0
-      sep_points(:) = 0; corr(:) = 0
-      call calc_corr_sep(Gre%m12, Gim%m12, inc, sep_points(1), corr)
-      call calc_corr_sep(Gre%m21, Gim%m21, inc, sep_points(2), corr)
-      call calc_corr_sep(Gre%m12, Gim%m12, inc, sep_points(3), corr)
-      call calc_corr_sep(Gre%m21, Gim%m21, inc, sep_points(4), corr)
-      nbroy = sep_points(4)
-      if (allocated(Gre%m11%elem)) then
-         call calc_corr_sep(Gre%m11, Gim%m11, inc, sep_points(5), corr)
-         call calc_corr_sep(Gre%m22, Gim%m22, inc, sep_points(6), corr)
-         call calc_corr_sep(Gre%m11, Gim%m11, inc, sep_points(7), corr)
-         call calc_corr_sep(Gre%m22, Gim%m22, inc, sep_points(8), corr)
-         nbroy = sep_points(8)
-      end if
-
-      ! Broyden arrays
-      allocate(qrpa_broin(nbroy),qrpa_broout(nbroy))
-      qrpa_broin = 0; qrpa_broout=0
-      si = 1
-
-      contains
-
-      ! Auxiliary subroutine to establish correspondence
-      subroutine calc_corr_sep(Gre, Gim, inc, sep_point, corr)
-         use type_bigblockmatrix, only : blockmatrix
-         !import, none
-         implicit none
-         type(blockmatrix), intent(in) :: Gre, Gim
-         integer, intent(inout) :: inc, sep_point, corr(:)
-         integer :: i
-         do i = 1, size(Gre%elem)
-            if ((Gre%elem(i) /= 0) .and. (Gim%elem(i) /= 0)) then
-               inc = inc + 1
-               corr(inc) = i
-            end if
-         end do
-         sep_point = inc
-      end subroutine calc_corr_sep
-
-   end subroutine init_broyden
 
    subroutine set_broinout_from_dRqp(dRqp_re, dRqp_im, io)
       implicit none
       type(bigblockmatrix), intent(in) :: dRqp_re, dRqp_im
       character(1), intent(in) :: io
-      ! integer :: nuv, nvec
+      integer :: nuv, nvec
       real(dp), pointer :: qrpa_bro(:)
-
-      if (.not. allocated(sep_points)) call abort("Error: Broyden not initialized.")
 
       nullify(qrpa_bro)
       select case(io)
@@ -104,26 +37,26 @@ contains
          case('o')
             qrpa_bro => qrpa_broout
       end select
-      ! nuv   = size(dRqp_re%m12%elem)
-      ! nvec  = nbroy/nuv
+      nuv   = size(dRqp_re%m12%elem)
+      nvec  = nbroy/nuv
 
-      ! ! Make sure sizes match up
-      ! if (allocated(dRqp_re%m11%elem)) then
-      !     if (nvec/=8) call abort
-      ! else
-      !     if (nvec/=4) call abort
-      ! end if
+      ! Make sure sizes match up
+      if (allocated(dRqp_re%m11%elem)) then
+          if (nvec/=8) call abort
+      else
+          if (nvec/=4) call abort
+      end if
 
-      qrpa_bro(              1:sep_points(1)) = dRqp_re%m12%elem(corr(              1:sep_points(1))) !rex
-      qrpa_bro(sep_points(1)+1:sep_points(2)) = dRqp_re%m21%elem(corr(sep_points(1)+1:sep_points(2))) !rey
-      qrpa_bro(sep_points(2)+1:sep_points(3)) = dRqp_im%m12%elem(corr(sep_points(2)+1:sep_points(3))) !imx
-      qrpa_bro(sep_points(3)+1:sep_points(4)) = dRqp_im%m21%elem(corr(sep_points(3)+1:sep_points(4))) !imy
+      qrpa_bro(1:nuv)         = dRqp_re%m12%elem !rex
+      qrpa_bro(nuv+1:2*nuv)   = dRqp_re%m21%elem !rey
+      qrpa_bro(2*nuv+1:3*nuv) = dRqp_im%m12%elem !imx
+      qrpa_bro(3*nuv+1:4*nuv) = dRqp_im%m21%elem !imy
 
       if (allocated(dRqp_re%m11%elem)) then
-         qrpa_bro(sep_points(4)+1:sep_points(5)) = dRqp_re%m11%elem(corr(sep_points(4)+1:sep_points(5))) !rep
-         qrpa_bro(sep_points(5)+1:sep_points(6)) = dRqp_re%m22%elem(corr(sep_points(5)+1:sep_points(6))) !req
-         qrpa_bro(sep_points(6)+1:sep_points(7)) = dRqp_im%m11%elem(corr(sep_points(6)+1:sep_points(7))) !imp
-         qrpa_bro(sep_points(7)+1:sep_points(8)) = dRqp_im%m22%elem(corr(sep_points(7)+1:sep_points(8))) !imq
+          qrpa_bro(4*nuv+1:5*nuv) = dRqp_re%m11%elem !rep
+          qrpa_bro(5*nuv+1:6*nuv) = dRqp_re%m22%elem !req
+          qrpa_bro(6*nuv+1:7*nuv) = dRqp_im%m11%elem !imp
+          qrpa_bro(7*nuv+1:8*nuv) = dRqp_im%m22%elem !imq
       end if
 
    end subroutine
@@ -131,30 +64,28 @@ contains
    subroutine set_dRqp_from_broin(dRqp_re, dRqp_im)
       implicit none
       type(bigblockmatrix), intent(inout) :: dRqp_re, dRqp_im
-      ! integer :: nuv, nvec
+      integer :: nuv, nvec
 
-      if (.not. allocated(sep_points)) call abort("Error: Broyden not initialized.")
+      nuv   = size(dRqp_re%m12%elem)
+      nvec  = nbroy/nuv
 
-      ! nuv   = size(dRqp_re%m12%elem)
-      ! nvec  = nbroy/nuv
+      ! Make sure sizes match up
+      if (allocated(dRqp_re%m11%elem)) then
+          if (nvec/=8) call abort
+      else
+          if (nvec/=4) call abort
+      end if
 
-      ! ! Make sure sizes match up
-      ! if (allocated(dRqp_re%m11%elem)) then
-      !     if (nvec/=8) call abort
-      ! else
-      !     if (nvec/=4) call abort
-      ! end if
-
-      dRqp_re%m12%elem(corr(              1:sep_points(1))) = qrpa_broin(              1:sep_points(1)) !rex
-      dRqp_re%m21%elem(corr(sep_points(1)+1:sep_points(2))) = qrpa_broin(sep_points(1)+1:sep_points(2)) !rey
-      dRqp_im%m12%elem(corr(sep_points(2)+1:sep_points(3))) = qrpa_broin(sep_points(2)+1:sep_points(3)) !imx
-      dRqp_im%m21%elem(corr(sep_points(3)+1:sep_points(4))) = qrpa_broin(sep_points(3)+1:sep_points(4)) !imy
+      dRqp_re%m12%elem = qrpa_broin(1:nuv)         !rex
+      dRqp_re%m21%elem = qrpa_broin(nuv+1:2*nuv)   !rey
+      dRqp_im%m12%elem = qrpa_broin(2*nuv+1:3*nuv) !imx
+      dRqp_im%m21%elem = qrpa_broin(3*nuv+1:4*nuv) !imy
 
       if (allocated(dRqp_re%m11%elem)) then
-         dRqp_re%m11%elem(corr(sep_points(4)+1:sep_points(5))) = qrpa_broin(sep_points(4)+1:sep_points(5)) !rep
-         dRqp_re%m22%elem(corr(sep_points(5)+1:sep_points(6))) = qrpa_broin(sep_points(5)+1:sep_points(6)) !req
-         dRqp_im%m11%elem(corr(sep_points(6)+1:sep_points(7))) = qrpa_broin(sep_points(6)+1:sep_points(7)) !imp
-         dRqp_im%m22%elem(corr(sep_points(7)+1:sep_points(8))) = qrpa_broin(sep_points(7)+1:sep_points(8)) !imq
+          dRqp_re%m11%elem = qrpa_broin(4*nuv+1:5*nuv) !rep
+          dRqp_re%m22%elem = qrpa_broin(5*nuv+1:6*nuv) !req
+          dRqp_im%m11%elem = qrpa_broin(6*nuv+1:7*nuv) !imp
+          dRqp_im%m22%elem = qrpa_broin(7*nuv+1:8*nuv) !imq
       end if
 
    end subroutine
@@ -208,22 +139,22 @@ contains
     Real(pr),        Intent(Out)    :: si
     Character(1),    Intent(Out)    :: bbroyden
     Real(pr),        Intent(InOut)  :: vout(N),vin(N)
-    Integer(ipr)                    :: iter_used,ipos,inext,info!,i,j
+    Integer(ipr)                    :: i,j,iter_used,ipos,inext,info
     Integer(ipr), Allocatable,Save  :: iwork(:)
-    Real(pr),    Allocatable, Save  :: beta(:,:),beta_store(:,:),work(:)
-    Real(pr),    Allocatable, Save  :: df(:,:),dv(:,:),curv(:),gamma(:)
-    Real(pr),    Parameter          :: w0=0.010_pr
-    Real(pr)                        :: DDOT,DNRM2,normi,sf,curvature
+    Real(pr),    Allocatable, Save  :: beta(:,:),work(:)
+    Real(pr),    Allocatable, Save  :: df(:,:),dv(:,:),curv(:)
+    Real(pr),                 Save  :: w0
+    Real(pr)                        :: DDOT,DNRM2,normi,gamma,sf,curvature
     !
-    sf=-1.0_pr; Call DAXPY(N,sf,vin,1,vout,1) ! vout = vout - vin
+    sf=-1.0_pr; Call DAXPY(N,sf,vin,1,vout,1) ! vout' = vout - vin
     si=Maxval(Abs(vout))
     !---------------------------------------------------------------------
     ! No mixing
     !---------------------------------------------------------------------
     If (M < 0) Then
-      bbroyden='N'
-      sf=+1.0_pr; Call DAXPY(N,sf,vout,1,vin,1) ! vin = vin + vout' = vout
-      Return
+       bbroyden='N'
+       sf=+1.0_pr; Call DAXPY(N,sf,vout,1,vin,1) ! vin = vin + vout' = vout
+       Return
     End If
     !---------------------------------------------------------------------
     ! Linear mixing
@@ -240,35 +171,48 @@ contains
     ipos=iter-1-((iter-2)/M)*M
     inext=iter-((iter-1)/M)*M
     If (iter.Eq.1) Then
-       If(Allocated(curv)) Deallocate(curv,df,dv,beta,work,iwork,gamma)
-       Allocate(curv(N),df(N,M),dv(N,M),beta(M,M),beta_store(M,M),work(M),iwork(M),gamma(M))
+       w0=0.010_pr
+       If(Allocated(curv)) Deallocate(curv,df,dv,beta,work,iwork)
+       Allocate(curv(N),df(N,M),dv(N,M),beta(M,M),work(M),iwork(M))
     Else
        df(:,ipos)=vout(:)-df(:,ipos)
        dv(:,ipos)= vin(:)-dv(:,ipos)
-       Normi=1.0_pr/DNRM2(N,df(1,ipos),1)
-       Call DSCAL(N,Normi,df(1,ipos),1)
-       Call DSCAL(N,Normi,dv(1,ipos),1)
-       Call DAXPY(N,alpha,df(1,ipos),1,dv(1,ipos),1) ! Vector u in the paper is stored in dv
-       ! construct the upper triangle of beta: only update the row/col related to df(:,ipos)
-       Call DGEMV('T',N,iter_used,1.0_pr,df(1,1),N,df(1,ipos),1,0.0_pr,work(1),1)
-       beta_store(1:(ipos-1),ipos) = work(1:(ipos-1))
-       beta_store(ipos,ipos) = w0*w0  + 1.0_pr
-       If (iter-1>M) beta_store(ipos,(ipos+1):iter_used) = work((ipos+1):iter_used)
-       beta(:,:) = beta_store(:,:)
+       Normi=1.0_pr/sqrt(DNRM2(N,df(1,ipos),1)**2)
+       Call dscal(N,Normi,df(1,ipos),1)
+       Call dscal(N,Normi,dv(1,ipos),1)
     Endif
-    Call DGEMV('T',N,iter_used,1.0_pr,df(1,1),N,vout(1),1,0.0_pr,gamma(1),1) ! Vector c in the paper
-    Call DSYSV('U',iter_used,1,beta(1,1),M,iwork,gamma(1),M,work,M,info) ! gamma = beta^(-1)*c
-    If(info.Ne.0) call abort(' In Broyden: info at DSYSV ')
+    Do i=1,iter_used
+       Do j=i+1,iter_used
+          beta(i,j)=DDOT(N,df(1, j),1,df(1,i),1)
+       Enddo
+       beta(i,i)= w0*w0  + 1.0_pr
+    Enddo
+    Call DSYTRF('U',iter_used,beta,M,iwork,work,M,info)
+    If(info.Ne.0) call abort(' In Broyden: info at DSYTRF ')
+    Call DSYTRI('U',iter_used,beta,M,iwork,work,info)
+    If(info.Ne.0) call abort(' In Broyden: info at DSYTRI ')
+    Do i=1,iter_used
+       Do j=i+1,iter_used
+          beta(j,i)=beta(i,j)
+       Enddo
+       work(i)=DDOT(N,df(1,i),1,vout,1)
+    Enddo
     curv=alpha*vout
-    Call DGEMV('N',N,iter_used,-1.0_pr,dv(1,1),N,gamma(1),1,1.0_pr,curv(1),1) ! curv = curv - gamma*u
+    Do i=1,iter_used
+       gamma=0.0_pr
+       Do j=1,iter_used
+          gamma=gamma+beta(j,i)*work(j)
+       Enddo
+       curv=curv-gamma*(dv(:,i)+alpha*df(:,i))
+    Enddo
     Call DCOPY(N,vout,1,df(1,inext),1)
     Call DCOPY(N,vin ,1,dv(1,inext),1)
-   !  curvature=DDOT(N,vout,1,curv,1)
-   !  If(.true.) then !curvature.Gt.-1.0_pr) Then
-    bbroyden='B'; sf=+1.0_pr; Call DAXPY(N,sf,curv,1,vin,1) ! vin = vin + curv
-   !  Else
-      !  bbroyden='L'; sf=alpha*0.50_pr; Call DAXPY(N,sf,vout,1,vin,1) ! vin = vin + a/2*vout
-   !  End If
+    curvature=DDOT(N,vout,1,curv,1)
+    If(.true.) then !curvature.Gt.-1.0_pr) Then
+       bbroyden='B'; sf=+1.0_pr; Call DAXPY(N,sf,curv,1,vin,1) ! vin = vin + curv
+    Else
+       bbroyden='L'; sf=alpha*0.50_pr; Call DAXPY(N,sf,vout,1,vin,1) ! vin = vin + a/2*vout
+    End If
   End Subroutine broyden_method
 
 end module pnfam_broyden

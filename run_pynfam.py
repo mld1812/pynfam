@@ -4,7 +4,7 @@ from pynfam import pynfam_mpi_calc
 
 pynfam_inputs = {
  'directories': {
-     'outputs' : 'Gd162_forbidden_k=1',
+     'outputs' : 'Gd162_all2bc_DME',
      'exes'    : './exes',
      'scratch' : './tests'
      },
@@ -14,7 +14,7 @@ pynfam_inputs = {
  'rerun_mode': 0,
 
  'hfb_mode': {
-     'gs_def_scan'    : (-2, (-0.2, 0, 0.2)), #(0, ()), #+1, (0.14,)
+     'gs_def_scan'    :  (0, ()), #(-2, (-0.2, 0, 0.2)), #(0, ()), #+1, (0.14,)
      'dripline_mode'  : 0,
      'ignore_nonconv' : 2
      },
@@ -22,7 +22,7 @@ pynfam_inputs = {
  'fam_mode': {
      'fam_contour': 'CIRCLE',
      'beta_type'  : '-',
-     'fam_ops'    : ('FORBIDDEN',1) #('P', 0)
+     'fam_ops'    : 'Forbidden' #('P', 0)
      }
 }
 
@@ -56,7 +56,7 @@ override_settings = {
           #'override_cgs'        : '',
           #'override_cf'         : '',
  
- 	 #'two_body_current_mode': 111100, #digit 4: GT, digit 5: P, digit 6: PS0; 1 = 2bc, 2 = DME for P/PS0. 2nd digit controls GT: use 1 for full pnfam, 4 for DME
+ 	 'two_body_current_mode': 141111, #digit 4: GT, digit 5: P, digit 6: PS0; 1 = 2bc, 2 = DME for P/PS0. 2nd digit controls GT: use 1 for full pnfam, 4 for DME
 		
  	  #'max_iter' : 2
           #'two_body_current_usep': False,
