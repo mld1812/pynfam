@@ -8,7 +8,7 @@ import numpy as np
 pynfam_inputs = {
  'directories': {
 
-     'outputs' : 'S40_GT_16shells_2112queueopenmp',
+     'outputs' : 'S40_All_2bc',
      'exes'    : './exes',
      'scratch' : './tests'
      },
@@ -26,7 +26,7 @@ pynfam_inputs = {
  'fam_mode': {
      'fam_contour': 'CIRCLE',
      'beta_type'  : '-',
-     'fam_ops'    : '1+', 
+     'fam_ops'    : 'All', 
 
      }
 }
@@ -51,7 +51,7 @@ override_settings = {
      },
 
  'fam' : {
-     #'two_body_current_mode' : 111100,
+     'two_body_current_mode' : 141111,
      #'interaction_name' : 'SKM*',
           #'vpair_t0'         : 0.0,
           #'convergence_epsilon' : 1e-2,

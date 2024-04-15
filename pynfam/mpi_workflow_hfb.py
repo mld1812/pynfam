@@ -148,6 +148,8 @@ def finalize_hfb_gs(mgr, ignore_nc, hfb_main, odd_fin, even_fin):
             mgr.paths.mkdirs(dest)
         else:
             dest = mgr.paths.hfb
+        print(dest)
+        print(os.listdir(dest + "/hfb_meta"))
         mgr.paths.copyAllFiles(hfb_gs.rundir, dest)
         hfb_gs.label = mgr.paths.rp(dest)
         new_outfile = os.path.join(dest, hfbthoRun.file_txt)

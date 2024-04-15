@@ -8,16 +8,16 @@ import numpy as np
 pynfam_inputs = {
  'directories': {
 
-     'outputs' : 'Gd162_All_16shells_unmerged',
+     'outputs' : 'Ar48_rerun2Test',
      'exes'    : './exes',
      'scratch' : './tests'
      },
 'nr_parallel_calcs': None,
 
- 'rerun_mode': 0,
+ 'rerun_mode': 2,
 
  'hfb_mode': {
-     'gs_def_scan'    : (0, ()),#(+1, ((0.24,)*400)),
+     'gs_def_scan'    : (-2, (-0.2, 0.0, 0.2)),#(+1, ((0.24,)*400)),
      'dripline_mode'  : 0,
      'ignore_nonconv' : 0,
      },
@@ -25,19 +25,19 @@ pynfam_inputs = {
  'fam_mode': {
      'fam_contour': 'CIRCLE',
      'beta_type'  : '-',
-     'fam_ops'    : 'All', 
+     'fam_ops'    : ('GT', 0), 
 
      }
 }
 
 override_settings = {
- 'hfb' : {'proton_number'    : 64, 
-          'neutron_number'   : 98,
-          'number_of_shells' : 16,
+ 'hfb' : {'proton_number'    : 18, 
+          'neutron_number'   : 30,
+          'number_of_shells' : 8,
           'number_gauss'     : 40,
           'number_laguerre'  : 40,
           'number_legendre'  : 80,
-          #'functional'       : 'SKM*',
+	        #'functional'       : 'HFB1',
           #'force_parity'     : False,
           },
 
@@ -50,7 +50,7 @@ override_settings = {
      },
 
  'fam' : {
-     #'two_body_current_mode' : 111100,
+     'two_body_current_mode' : 111100,
      #'interaction_name' : 'SKM*',
           #'vpair_t0'         : 0.0,
           #'convergence_epsilon' : 1e-2,
@@ -65,7 +65,10 @@ override_settings = {
  
      },
 
- 'psi' : {}
+ 'psi' : {
+	#'GA': -1.0
+}
+
 }
 
 

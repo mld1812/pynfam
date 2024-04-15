@@ -8,7 +8,7 @@ import numpy as np
 pynfam_inputs = {
  'directories': {
 
-     'outputs' : 'S40_GT_2bc_16shells_skylake',
+     'outputs' : 'S40_GT_20shells_open_nothread',
      'exes'    : './exes',
      'scratch' : './tests'
      },
@@ -24,9 +24,9 @@ pynfam_inputs = {
      },
 
  'fam_mode': {
-     'fam_contour': 'CIRCLE',
+     'fam_contour': 'CONSTl',
      'beta_type'  : '-',
-     'fam_ops'    : '1+', 
+     'fam_ops'    : 'Allowed', 
 
      }
 }
@@ -34,7 +34,7 @@ pynfam_inputs = {
 override_settings = {
  'hfb' : {'proton_number'    : 16, 
           'neutron_number'   : 24,
-          'number_of_shells' : 16,
+          'number_of_shells' : 20,
           'number_gauss'     : 40,
           'number_laguerre'  : 40,
           'number_legendre'  : 80,
@@ -43,15 +43,15 @@ override_settings = {
           },
 
 
- 'ctr' : {#'energy_min' : 2.4,
-          #'energy_max' : 22.4,
-          #'half_width' : 0.2,
-          #'nr_points'  : 201,
+ 'ctr' : {'energy_min' : 2.4,
+          'energy_max' : 22.4,
+          'half_width' : 0.2,
+          'nr_points'  : 70,
 
      },
 
  'fam' : {
-     'two_body_current_mode' : 111100,
+     #'two_body_current_mode' : 111100,
      #'interaction_name' : 'SKM*',
           #'vpair_t0'         : 0.0,
           #'convergence_epsilon' : 1e-2,

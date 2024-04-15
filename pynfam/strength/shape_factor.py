@@ -584,9 +584,9 @@ class shapeFactor(phaseSpace):
             #if self.ffk_err[k] and genop not in shapeFactor.al_ops_raw:
             #    continue
             #11/26 implement new condition to only skip if crossterm components aren't computed. alternately, disable this check altogether
-            #if genop not in shapeFactor.al_ops_raw and self.ffjk_err(bareop, k):
-            #    print("Skipped because missing crossterms")
-            #    continue
+            if genop not in shapeFactor.al_ops_raw and self.ffjk_err(bareop, k):
+                print("Skipped because missing crossterms")
+                continue
             # Strength
             b[bareop][k] = pre[genop]**2*cstr[u'Strength']
 
@@ -1160,7 +1160,7 @@ class shapeFactor(phaseSpace):
             fac = 1.0
 
         for h in str_df:
-            if h in shapeFactor.betaout_keys:
+            if h in shapeFactor.betaout_keys or h == 'Total-SD':
                 cumulative = cumtrapz(str_df[h], str_df[u'Re(EQRPA)'], initial=0)
                 cumstr_out[h] = cumulative*fac
 
@@ -1183,15 +1183,18 @@ class shapeFactor(phaseSpace):
         """
 
         genop_list = list(self.strengths.keys())
-        if u'GT_K0' not in genop_list or u'GT_K1' not in genop_list:
+        if u'GT_K0' not in genop_list and u'GT_K1' not in genop_list:
             raise RuntimeError(u"Missing GT strength for calcTotalGT")
 
         gt_df = pd.DataFrame(columns=[u'Re(EQRPA)', u'Im(EQRPA)'])
         gt_df[u'Re(EQRPA)'] = np.real(self.contour.ctr_z)
         gt_df[u'Im(EQRPA)'] = np.imag(self.contour.ctr_z)
 
-        gt0 = np.imag(self.strengths[u'GT_K0'].cstr_df[u'Strength'].values)
-        gt1 = np.imag(self.strengths[u'GT_K1'].cstr_df[u'Strength'].values)
+        gt0 = 0; gt1 = 0
+        if u'GT_K0' in genop_list:
+            gt0 = np.imag(self.strengths[u'GT_K0'].cstr_df[u'Strength'].values)
+        if u'GT_K1' in genop_list:
+            gt1 = np.imag(self.strengths[u'GT_K1'].cstr_df[u'Strength'].values)
 
         gt_df[u'Total-GT'] = gt0 + 2.0*gt1
         if zero_neg:
@@ -1201,6 +1204,45 @@ class shapeFactor(phaseSpace):
         gt_df[u'Cumulative-GT'] = gtc[u'Total-GT']
 
         return gt_df
+
+    #--------------------------------------------------------------
+    def calcTotalSD(self, emin=None, emax=None, zero_neg_str=False):
+        """
+        Calculate the total spin dipole strength.
+
+        Args:
+            emin (float): Custom mininum energy for the integration limits (default None).
+            emax (float): Custom maximum energy for the integration limits (default None).
+            zero_neg_str (bool): Set negative strength to zero before totalling (default False).
+
+        Returns:
+            DataFrame
+        """
+
+        genops = self.strengths.keys()
+        if all([not {u'RS0_K'+k, u'RS1_K'+k, u'RS2_K'+k} <= genops for k in (u'0', u'1', u'2')]):
+            raise RuntimeError(u"Missing SD strength for calcTotalSD")
+
+        sd_df = pd.DataFrame(columns=[u'Re(EQRPA)', u'Im(EQRPA)'])
+        sd_df[u'Re(EQRPA)'] = np.real(self.contour.ctr_z)
+        sd_df[u'Im(EQRPA)'] = np.imag(self.contour.ctr_z)
+        total_SD = np.array((0.0,) * len(sd_df))
+
+        for j in (0, 1, 2):
+            for k in range(0, j+1):
+                item = u'RS'+str(j)+'_K'+str(k)
+                factor = 1.0 if k == 0 else 2.0
+                if item in genops:
+                    total_SD += factor * np.imag(self.strengths[item].cstr_df[u'Strength'].values)
+
+        if zero_neg_str:
+            total_SD.clip(min=0)
+        sd_df[u'Total-SD'] = total_SD
+
+        sdc = self.calcCumulativeStr(sd_df, emin=emin, emax=emax, rate=False)
+        sd_df[u'Cumulative-SD'] = sdc[u'Total-SD']
+
+        return sd_df
 
     #==============================================================#
     #                       I/O Methods                            #

@@ -131,7 +131,7 @@ def results_bare_strength(mgr, shapefacs, ctr_closed, btot_df=None, subdir=u''):
     genops = shapefacs.genops
 
     # Bare Gamow-Teller strength (GTK0 + 2GTK1). Writes BGT vs E and sum(BGT) vs E
-    if not ctr_closed and (u'GT_K0' in genops and u'GT_K1' in genops):
+    if not ctr_closed and (u'GT_K0' in genops or u'GT_K1' in genops):
         gt_str = shapefacs.calcTotalGT(zero_neg=zero_neg)
         # Update E 1st peak to be for GT, not PSWSF, for file header
         if shapefacs.is_raw:
@@ -149,6 +149,33 @@ def results_bare_strength(mgr, shapefacs, ctr_closed, btot_df=None, subdir=u''):
     fname = prefix+u"total_str.out"
     shapefacs.writeOutput(btot_df, title, fname, sf_dest)
 
+#-------------------------------------------------------------------------------
+def calc_spin_dipole_results(mgr, shapefacs, ctr_closed, subdir=u''):
+    genops = set(shapefacs.genops)
+    if ctr_closed:
+        return
+    if all([not {u'RS0_K'+k, u'RS1_K'+k, u'RS2_K'+k} <= genops for k in (u'0', u'1', u'2')]):
+        return
+
+    # Set the filenames and dest
+    if shapefacs.is_raw:
+        sf_dest = os.path.join(mgr.paths.beta, subdir)
+        prefix = u''
+        zero_neg = False
+    else:
+        sf_dest = os.path.join(mgr.paths.beta_m, subdir)
+        prefix = u'zeroed_'
+        zero_neg = True
+
+    # Spin-dipole Strength (Update E_1stpeak)
+    sd_str = shapefacs.calcTotalSD(zero_neg_str=zero_neg)
+    # Update E 1st peak to be for SD for file header
+    if shapefacs.is_raw:
+        ind = shapefacs.findFirstPeak(sd_str[u'Re(EQRPA)'].values, sd_str[u'Total-SD'].values)[0]
+        shapefacs.sf_metadict[u'E_1stPeak'] = sd_str[u'Re(EQRPA)'].values[ind]
+    title = u"# Nuclear Beta Decay Spin-Dipole Strength"
+    fname = prefix+u"totalSD_str.out"
+    shapefacs.writeOutput(sd_str, title, fname, sf_dest)
 
 #-------------------------------------------------------------------------------
 def write_beta_log(mgr, shapefacs, rates_df, hfb_gs, psi_log={}, subdir=u'', conv_time=None):

@@ -6,3 +6,5 @@ __pycache__/
 *.o
 *.out
 tests/
+fit_tests2/
+fit_examples/

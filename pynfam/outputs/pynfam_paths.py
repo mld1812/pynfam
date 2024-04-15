@@ -260,7 +260,12 @@ class pynfamPaths(object):
     def copyAllFiles(self, src, dest):
         """ Copy all files (only) from src to dest directory.
         """
-        src_files = os.listdir(src)
+        print(src)
+        try:
+            src_files = os.listdir(src)
+        except:
+            print("Directory not found. Trying again:")
+            src_files = os.listdir(src)
         for file_name in src_files:
             full_file_name = os.path.join(src, file_name)
             if (os.path.isfile(full_file_name)):

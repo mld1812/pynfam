@@ -208,7 +208,7 @@ class fortProcess(nmlInputs):
         if not self.label:
             raise RuntimeError(u"Cannot execute run_exe until run label has been set")
         if not os.path.exists(self.rundir):
-            os.makedirs(self.rundir)
+            os.makedirs(self.rundir, exist_ok=True)
 
         # Populate rundir with the necessary inputs files
         self.writeNml(self.rundir) # namelist

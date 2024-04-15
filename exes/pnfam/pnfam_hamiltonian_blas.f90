@@ -25,7 +25,6 @@ module pnfam_hamiltonian
    private
 
    integer, parameter :: dp = kind(1.0d0)
-   integer            :: maxval_db = -1 ! Maximum value in db
 
    ! Coordinate space local densities, custom type for organization
    type(density_set) :: rhox
@@ -60,7 +59,7 @@ contains
       ! Perturbed hamiltonian (sp basis)
       type(blockmatrix), intent(inout) :: reh_pn, imh_pn, redp, imdp,&
                                           reh_np, imh_np, redm, imdm
-      if (maxval_db<0) maxval_db = Maxval(db)
+
       if (.not.rhox%alloc) call allocate_density(rhox, nghl)
 
       ! PN and + Fields
@@ -74,49 +73,50 @@ contains
       call pairingfield(rhox, redm, imdm)  ! Delta- from rho-tilde-(r)
    end subroutine calc_hamiltonian
 
-
    !---------------------------------------------------------------------------
    ! Some helper routines for custom types
    !---------------------------------------------------------------------------
-   subroutine allocate_field(a, n)
+   subroutine allocate_init_field(a, n)
       type(field) :: a
       integer, intent(in) :: n
-      allocate(a%re(n), a%im(n))
-   end subroutine allocate_field
+      if (.not. allocated(a%re)) allocate(a%re(n))
+      if (.not. allocated(a%im)) allocate(a%im(n))
+      a%re = 0.0_dp; a%im = 0.0_dp
+   end subroutine allocate_init_field
 
    subroutine deallocate_field(a)
       type(field) :: a
-      deallocate(a%re, a%im)
+      if (allocated(a%re)) deallocate(a%re)
+      if (allocated(a%im)) deallocate(a%im)
    end subroutine deallocate_field
 
    subroutine add_field(a, symbol, add)
-      ! a(:) = a(:) + symbol*add(:)
       type(field), intent(inout) :: a
       integer, intent(in) :: symbol
       type(field), intent(in) :: add
-      a%re(1:nghl) = a%re(1:nghl) + symbol*add%re(1:nghl)
-      a%im(1:nghl) = a%im(1:nghl) + symbol*add%im(1:nghl)
+      a%re = a%re + symbol*add%re
+      a%im = a%im + symbol*add%im
    end subroutine add_field
 
-   subroutine add_mul_1d(a, b, beta, c)
-      ! c(:) = a(:)*b(:) + beta*c(:)
-      real(dp), dimension(:), intent(in), contiguous :: a, b
-      real(dp), intent(in) :: beta
-      real(dp), dimension(:), intent(inout), contiguous :: c
-      c(1:nghl) = a(1:nghl)*b(1:nghl) + beta*c(1:nghl)
-   end subroutine add_mul_1d
+   subroutine add_multiply(a,b,c)
+      real(dp), dimension(:), intent(inout), contiguous :: a
+      real(dp), dimension(:), intent(in), contiguous :: b,c
+      a(:) = a(:) + b(:)*c(:)
+   end subroutine 
 
-   subroutine allocate_2darray(a, nr, nc)
+   subroutine allocate_init_2darray(a, nr, nc)
       type(array_2d) :: a
       integer, intent(in) :: nr, nc
-      allocate(a%re(nr, nc), a%im(nr, nc))
-   end subroutine allocate_2darray
+      if (.not. allocated(a%re)) allocate(a%re(nr, nc))
+      if (.not. allocated(a%im)) allocate(a%im(nr, nc))
+      a%re = 0.0_dp; a%im = 0.0_dp
+   end subroutine allocate_init_2darray
 
    subroutine deallocate_2darray(a)
       type(array_2d) :: a
-      deallocate(a%re, a%im)
+      if (allocated(a%re)) deallocate(a%re)
+      if (allocated(a%im)) deallocate(a%im)
    end subroutine deallocate_2darray
-
 
    !---------------------------------------------------------------------------
    ! Computation of the local densities in coordinate space
@@ -125,11 +125,11 @@ contains
 
       implicit none
 
-      type(blockmatrix), intent(in) :: rerho, imrho, rek, imk
+      type(blockmatrix), intent(inout) :: rerho, imrho, rek, imk
       type(density_set), intent(inout) :: ds
 
-      integer  :: ia, ib, ix, iy, iz
-      real(dp), pointer, dimension(:) :: wf_b, dr_wf_b, dz_wf_b, dp_wf_b
+      integer  :: ia, ib, ix, iy
+      real(dp), dimension(nghl) :: wf_b, dr_wf_b, dz_wf_b, dp_wf_b
 
       ! Result of Sum_a wf_a (or its derivatives) * rho_ab
       ! index gives the spin (0 is not used)
@@ -138,7 +138,7 @@ contains
 
       ! The following are needed to allow OpenMP reduction, which does not currently
       ! work for derived types.  Hacky :(
-      real(dp), dimension(:), allocatable, save :: dsrerho, dsimrho, dsretau, dsimtau,   &
+      real(dp), dimension(:), allocatable :: dsrerho, dsimrho, dsretau, dsimtau,         &
          dsretjrr, dsimtjrr, dsretjpr, dsimtjpr, dsretjzr, dsimtjzr, dsretjrp, dsimtjrp, &
          dsretjpp, dsimtjpp, dsretjzp, dsimtjzp, dsretjrz, dsimtjrz, dsretjpz, dsimtjpz, &
          dsretjzz, dsimtjzz, dsresr, dsimsr, dsresp, dsimsp, dsresz, dsimsz, dsretr,     &
@@ -146,7 +146,6 @@ contains
          dsrejz, dsimjz, dsrefr, dsimfr, dsrefp, dsimfp, dsrefz, dsimfz, dsregs,         &
          dsimgs, dsrerb, dsimrb, dsresbr, dsimsbr, dsresbp, dsimsbp, dsresbz, dsimsbz
       
-      ! Allocate auxiliary arrays
       ! Get around a problem with OpenMP on OS X by making these allocatable
       ! http://stackoverflow.com/a/13884056/656740
       if (.not.allocated(dsrerho)) then
@@ -161,19 +160,9 @@ contains
             dsimfp(nghl), dsrefz(nghl), dsimfz(nghl), dsregs(nghl), dsimgs(nghl), dsrerb(nghl), &
             dsimrb(nghl), dsresbr(nghl), dsimsbr(nghl), dsresbp(nghl), dsimsbp(nghl),           &
             dsresbz(nghl), dsimsbz(nghl))
-         call allocate_field(wf_wf_prod,nghl)
-         call allocate_field(aux,nghl)
-         do iz = -1, 1, 2
-            call allocate_2darray(wfa_rhoab(iz),nghl,maxval_db)
-            call allocate_2darray(dr_wfa_rhoab(iz),nghl,maxval_db)
-            call allocate_2darray(dp_wfa_rhoab(iz),nghl,maxval_db)
-            call allocate_2darray(dz_wfa_rhoab(iz),nghl,maxval_db)
-         end do
       end if
 
-      ! Initialize the densities to zero; zeroing wf_wf_prod, aux is unnecessary.
-      ! Zeroing wfa_rhoab, dr_wfa_rhoab, dp_wfa_rhoab and dz_wfa_rhoab is also unnecessary,
-      ! which is ensured by conditions marked by (*) below in this subroutine.
+      ! Initialize the densities to zero
       dsrerho  = 0 ; dsimrho  = 0 ; dsretau  = 0 ; dsimtau  = 0 ; dsretjrr = 0 ; dsimtjrr = 0
       dsretjpr = 0 ; dsimtjpr = 0 ; dsretjzr = 0 ; dsimtjzr = 0 ; dsretjrp = 0 ; dsimtjrp = 0
       dsretjpp = 0 ; dsimtjpp = 0
@@ -187,402 +176,411 @@ contains
       dsrerb   = 0 ; dsimrb   = 0 ; dsresbr  = 0 ; dsimsbr  = 0 ; dsresbp  = 0 ; dsimsbp  = 0
       dsresbz  = 0 ; dsimsbz  = 0
 
-      ! Loop over blocks
+      ! Loop over the blocks.
+      ! Calculate e.g. rho(x) = Sum_{ab} rho_ab wf_a(x) Conjg[wf_b(x)]
+
+      call allocate_init_field(wf_wf_prod,nghl)
+      call allocate_init_field(aux,nghl)
+      do ix = -1, 1, 2
+         call allocate_init_2darray(wfa_rhoab(ix),nghl,dqp)
+         call allocate_init_2darray(dr_wfa_rhoab(ix),nghl,dqp)
+         call allocate_init_2darray(dp_wfa_rhoab(ix),nghl,dqp)
+         call allocate_init_2darray(dz_wfa_rhoab(ix),nghl,dqp)
+      end do
+
+      ! Calculate Sum_a wf_a (or its derivatives) * rho_ab
+      ! Use OpenMP-enabled BLAS library to achieve best performance
       do ix = 1, nb
          iy = rerho%ir2c(ix) ! column index of current block
          if (iy==0) cycle
-
-         ! Calculate Sum_a wf_a (or its derivatives) * rho_ab
-         ! Use OpenMP-enabled BLAS library to achieve best performance
          ia = isstart(ix)
+         ib = isstart(iy)
 
          ! wf_a has spin up
          if (num_spin_up(ix)>0) then
             call dgemm('N','N',nghl,db(iy),num_spin_up(ix),1.0_dp,wf(1,ia),nghl,&
-                       rerho%elem(rerho%ir2m(ix)),db(ix),0.0_dp,wfa_rhoab(1)%re(1,1),nghl)
+                       rerho%elem(rerho%ir2m(ix)),db(ix),0.0_dp,wfa_rhoab(1)%re(1,ib),nghl)
             call dgemm('N','N',nghl,db(iy),num_spin_up(ix),1.0_dp,wf(1,ia),nghl,&
-                       imrho%elem(imrho%ir2m(ix)),db(ix),0.0_dp,wfa_rhoab(1)%im(1,1),nghl)
+                       imrho%elem(imrho%ir2m(ix)),db(ix),0.0_dp,wfa_rhoab(1)%im(1,ib),nghl)
             call dgemm('N','N',nghl,db(iy),num_spin_up(ix),1.0_dp,wfdr(1,ia),nghl,&
-                       rerho%elem(rerho%ir2m(ix)),db(ix),0.0_dp,dr_wfa_rhoab(1)%re(1,1),nghl)
+                       rerho%elem(rerho%ir2m(ix)),db(ix),0.0_dp,dr_wfa_rhoab(1)%re(1,ib),nghl)
             call dgemm('N','N',nghl,db(iy),num_spin_up(ix),1.0_dp,wfdr(1,ia),nghl,&
-                       imrho%elem(imrho%ir2m(ix)),db(ix),0.0_dp,dr_wfa_rhoab(1)%im(1,1),nghl)
+                       imrho%elem(imrho%ir2m(ix)),db(ix),0.0_dp,dr_wfa_rhoab(1)%im(1,ib),nghl)
             call dgemm('N','N',nghl,db(iy),num_spin_up(ix),1.0_dp,wfdp(1,ia),nghl,&
-                       rerho%elem(rerho%ir2m(ix)),db(ix),0.0_dp,dp_wfa_rhoab(1)%re(1,1),nghl)
+                       rerho%elem(rerho%ir2m(ix)),db(ix),0.0_dp,dp_wfa_rhoab(1)%re(1,ib),nghl)
             call dgemm('N','N',nghl,db(iy),num_spin_up(ix),1.0_dp,wfdp(1,ia),nghl,&
-                       imrho%elem(imrho%ir2m(ix)),db(ix),0.0_dp,dp_wfa_rhoab(1)%im(1,1),nghl)
+                       imrho%elem(imrho%ir2m(ix)),db(ix),0.0_dp,dp_wfa_rhoab(1)%im(1,ib),nghl)
             call dgemm('N','N',nghl,db(iy),num_spin_up(ix),1.0_dp,wfdz(1,ia),nghl,&
-                       rerho%elem(rerho%ir2m(ix)),db(ix),0.0_dp,dz_wfa_rhoab(1)%re(1,1),nghl)
+                       rerho%elem(rerho%ir2m(ix)),db(ix),0.0_dp,dz_wfa_rhoab(1)%re(1,ib),nghl)
             call dgemm('N','N',nghl,db(iy),num_spin_up(ix),1.0_dp,wfdz(1,ia),nghl,&
-                       imrho%elem(imrho%ir2m(ix)),db(ix),0.0_dp,dz_wfa_rhoab(1)%im(1,1),nghl)
+                       imrho%elem(imrho%ir2m(ix)),db(ix),0.0_dp,dz_wfa_rhoab(1)%im(1,ib),nghl)
          end if
 
          ! wf_a has spin down
-         if (num_spin_dw(ix)>0) then
-            ia = ia + num_spin_up(ix)
-            call dgemm('N','N',nghl,db(iy),num_spin_dw(ix),1.0_dp,wf(1,ia),nghl,&
-                       rerho%elem(rerho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,wfa_rhoab(-1)%re(1,1),nghl)
-            call dgemm('N','N',nghl,db(iy),num_spin_dw(ix),1.0_dp,wf(1,ia),nghl,&
-                       imrho%elem(imrho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,wfa_rhoab(-1)%im(1,1),nghl)
-            call dgemm('N','N',nghl,db(iy),num_spin_dw(ix),1.0_dp,wfdr(1,ia),nghl,&
-                       rerho%elem(rerho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,dr_wfa_rhoab(-1)%re(1,1),nghl)
-            call dgemm('N','N',nghl,db(iy),num_spin_dw(ix),1.0_dp,wfdr(1,ia),nghl,&
-                       imrho%elem(imrho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,dr_wfa_rhoab(-1)%im(1,1),nghl)
-            call dgemm('N','N',nghl,db(iy),num_spin_dw(ix),1.0_dp,wfdp(1,ia),nghl,&
-                       rerho%elem(rerho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,dp_wfa_rhoab(-1)%re(1,1),nghl)
-            call dgemm('N','N',nghl,db(iy),num_spin_dw(ix),1.0_dp,wfdp(1,ia),nghl,&
-                       imrho%elem(imrho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,dp_wfa_rhoab(-1)%im(1,1),nghl)
-            call dgemm('N','N',nghl,db(iy),num_spin_dw(ix),1.0_dp,wfdz(1,ia),nghl,&
-                       rerho%elem(rerho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,dz_wfa_rhoab(-1)%re(1,1),nghl)
-            call dgemm('N','N',nghl,db(iy),num_spin_dw(ix),1.0_dp,wfdz(1,ia),nghl,&
-                       imrho%elem(imrho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,dz_wfa_rhoab(-1)%im(1,1),nghl)
+         if (db(ix)-num_spin_up(ix)>0) then
+            call dgemm('N','N',nghl,db(iy),db(ix)-num_spin_up(ix),1.0_dp,wf(1,ia+num_spin_up(ix)),nghl,&
+                       rerho%elem(rerho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,wfa_rhoab(-1)%re(1,ib),nghl)
+            call dgemm('N','N',nghl,db(iy),db(ix)-num_spin_up(ix),1.0_dp,wf(1,ia+num_spin_up(ix)),nghl,&
+                       imrho%elem(imrho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,wfa_rhoab(-1)%im(1,ib),nghl)
+            call dgemm('N','N',nghl,db(iy),db(ix)-num_spin_up(ix),1.0_dp,wfdr(1,ia+num_spin_up(ix)),nghl,&
+                       rerho%elem(rerho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,dr_wfa_rhoab(-1)%re(1,ib),nghl)
+            call dgemm('N','N',nghl,db(iy),db(ix)-num_spin_up(ix),1.0_dp,wfdr(1,ia+num_spin_up(ix)),nghl,&
+                       imrho%elem(imrho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,dr_wfa_rhoab(-1)%im(1,ib),nghl)
+            call dgemm('N','N',nghl,db(iy),db(ix)-num_spin_up(ix),1.0_dp,wfdp(1,ia+num_spin_up(ix)),nghl,&
+                       rerho%elem(rerho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,dp_wfa_rhoab(-1)%re(1,ib),nghl)
+            call dgemm('N','N',nghl,db(iy),db(ix)-num_spin_up(ix),1.0_dp,wfdp(1,ia+num_spin_up(ix)),nghl,&
+                       imrho%elem(imrho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,dp_wfa_rhoab(-1)%im(1,ib),nghl)
+            call dgemm('N','N',nghl,db(iy),db(ix)-num_spin_up(ix),1.0_dp,wfdz(1,ia+num_spin_up(ix)),nghl,&
+                       rerho%elem(rerho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,dz_wfa_rhoab(-1)%re(1,ib),nghl)
+            call dgemm('N','N',nghl,db(iy),db(ix)-num_spin_up(ix),1.0_dp,wfdz(1,ia+num_spin_up(ix)),nghl,&
+                       imrho%elem(imrho%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,dz_wfa_rhoab(-1)%im(1,ib),nghl)
          end if
-
-         ! Calculate local densities in coordinate space
-         !!$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(iy,isstart,db,ns,y,wf,wfdr,wfdp,wfdz) &
-         !!$OMP& SHARED(wfa_rhoab,dr_wfa_rhoab,dp_wfa_rhoab,dz_wfa_rhoab) &
-         !!$OMP& REDUCTION(+:dsrerho) REDUCTION(+:dsimrho) REDUCTION(+:dsretau) REDUCTION(+:dsimtau) &
-         !!$OMP& REDUCTION(+:dsretjrr) REDUCTION(+:dsimtjrr) REDUCTION(+:dsretjpr) REDUCTION(+:dsimtjpr) &
-         !!$OMP& REDUCTION(+:dsretjzr) REDUCTION(+:dsimtjzr) REDUCTION(+:dsretjrp) REDUCTION(+:dsimtjrp) &
-         !!$OMP& REDUCTION(+:dsretjpp) REDUCTION(+:dsimtjpp) REDUCTION(+:dsretjzp) REDUCTION(+:dsimtjzp) &
-         !!$OMP& REDUCTION(+:dsretjrz) REDUCTION(+:dsimtjrz) REDUCTION(+:dsretjpz) REDUCTION(+:dsimtjpz) &
-         !!$OMP& REDUCTION(+:dsretjzz) REDUCTION(+:dsimtjzz) REDUCTION(+:dsresr) REDUCTION(+:dsimsr) &
-         !!$OMP& REDUCTION(+:dsresp) REDUCTION(+:dsimsp) REDUCTION(+:dsresz) REDUCTION(+:dsimsz) &
-         !!$OMP& REDUCTION(+:dsretr) REDUCTION(+:dsimtr) REDUCTION(+:dsretp) REDUCTION(+:dsimtp) &
-         !!$OMP& REDUCTION(+:dsretz) REDUCTION(+:dsimtz) REDUCTION(+:dsrejr) REDUCTION(+:dsimjr) &
-         !!$OMP& REDUCTION(+:dsrejp) REDUCTION(+:dsimjp) REDUCTION(+:dsrejz) REDUCTION(+:dsimjz) &
-         !!$OMP& REDUCTION(+:dsrefr) REDUCTION(+:dsimfr) REDUCTION(+:dsrefp) REDUCTION(+:dsimfp) &
-         !!$OMP& REDUCTION(+:dsrefz) REDUCTION(+:dsimfz) REDUCTION(+:dsregs) REDUCTION(+:dsimgs)
-         do iz = 1, db(iy)
-
+      end do
+      
+      ! Calculate local densities in coordinate space
+      !!$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(ns,y,wf,wfdr,wfdp,wfdz) &
+      !!$OMP& SHARED(wfa_rhoab,dr_wfa_rhoab,dp_wfa_rhoab,dz_wfa_rhoab) &
+      !!$OMP& REDUCTION(+:dsrerho) REDUCTION(+:dsimrho) REDUCTION(+:dsretau) REDUCTION(+:dsimtau) &
+      !!$OMP& REDUCTION(+:dsretjrr) REDUCTION(+:dsimtjrr) REDUCTION(+:dsretjpr) REDUCTION(+:dsimtjpr) &
+      !!$OMP& REDUCTION(+:dsretjzr) REDUCTION(+:dsimtjzr) REDUCTION(+:dsretjrp) REDUCTION(+:dsimtjrp) &
+      !!$OMP& REDUCTION(+:dsretjpp) REDUCTION(+:dsimtjpp) REDUCTION(+:dsretjzp) REDUCTION(+:dsimtjzp) &
+      !!$OMP& REDUCTION(+:dsretjrz) REDUCTION(+:dsimtjrz) REDUCTION(+:dsretjpz) REDUCTION(+:dsimtjpz) &
+      !!$OMP& REDUCTION(+:dsretjzz) REDUCTION(+:dsimtjzz) REDUCTION(+:dsresr) REDUCTION(+:dsimsr) &
+      !!$OMP& REDUCTION(+:dsresp) REDUCTION(+:dsimsp) REDUCTION(+:dsresz) REDUCTION(+:dsimsz) &
+      !!$OMP& REDUCTION(+:dsretr) REDUCTION(+:dsimtr) REDUCTION(+:dsretp) REDUCTION(+:dsimtp) &
+      !!$OMP& REDUCTION(+:dsretz) REDUCTION(+:dsimtz) REDUCTION(+:dsrejr) REDUCTION(+:dsimjr) &
+      !!$OMP& REDUCTION(+:dsrejp) REDUCTION(+:dsimjp) REDUCTION(+:dsrejz) REDUCTION(+:dsimjz) &
+      !!$OMP& REDUCTION(+:dsrefr) REDUCTION(+:dsimfr) REDUCTION(+:dsrefp) REDUCTION(+:dsimfp) &
+      !!$OMP& REDUCTION(+:dsrefz) REDUCTION(+:dsimfz) REDUCTION(+:dsregs) REDUCTION(+:dsimgs)
+      do ib = 1, dqp
+         
             ! Column vector |b>
-            ib = isstart(iy)+iz-1
-            wf_b => wf(:, ib)
-            dr_wf_b => wfdr(:, ib)
-            dp_wf_b => wfdp(:, ib)
-            dz_wf_b => wfdz(:, ib)
-
-            ! Diagonal in spin (|a> = |+>,  |b> = |+>; or |a> = |->,  |b> = |->)
-            ! Condition below ensures no calc when no |a> with the required spin exists
-            if (((ns(ib) == +1) .and. (num_spin_up(ix)>0)) .or. &
-                ((ns(ib) == -1) .and. (num_spin_dw(ix)>0))) then ! (*)
+            wf_b = wf(:, ib)
+            dr_wf_b = wfdr(:, ib)
+            dp_wf_b = wfdp(:, ib)
+            dz_wf_b = wfdz(:, ib)
 
                ! Auxiliary array
-               wf_wf_prod%re(:) = wfa_rhoab(ns(ib))%re(:,iz)*wf_b(:)
-               wf_wf_prod%im(:) = wfa_rhoab(ns(ib))%im(:,iz)*wf_b(:)
+               wf_wf_prod%re(:) = wfa_rhoab(ns(ib))%re(:,ib)*wf_b(:)
+               wf_wf_prod%im(:) = wfa_rhoab(ns(ib))%im(:,ib)*wf_b(:)
+               
+               ! Diagonal in spin
+                  ! rho: scalar density
+                  dsrerho(:) = dsrerho(:) + wf_wf_prod%re(:)
+                  dsimrho(:) = dsimrho(:) + wf_wf_prod%im(:)
 
-               ! rho: scalar density
-               dsrerho(:) = dsrerho(:) + wf_wf_prod%re(:)
-               dsimrho(:) = dsimrho(:) + wf_wf_prod%im(:)
+                  ! s_z: z-component of vector density
+                  dsresz(:) = dsresz(:) + ns(ib)*wf_wf_prod%re(:)
+                  dsimsz(:) = dsimsz(:) + ns(ib)*wf_wf_prod%im(:)
+                  
+                  ! j_phi: phi-component of current density
+                  aux%re(:) = (wfa_rhoab(ns(ib))%re(:,ib)*dp_wf_b(:)+dp_wfa_rhoab(ns(ib))%re(:,ib)*wf_b(:))/2
+                  aux%im(:) = (wfa_rhoab(ns(ib))%im(:,ib)*dp_wf_b(:)+dp_wfa_rhoab(ns(ib))%im(:,ib)*wf_b(:))/2
+                  dsrejp(:) = dsrejp(:) + aux%re(:)
+                  dsimjp(:) = dsimjp(:) + aux%im(:)
+                  
+                  ! J_{phi,z}: (phi,z)-component of tensor density [= J_{2,3}/rho]
+                  !aux%re(:) = (wfa_rhoab(ns(ib))%re(:,ib)*dp_wf_b(:)+dp_wfa_rhoab(ns(ib))%re(:,ib)*wf_b(:))/2
+                  !aux%im(:) = (wfa_rhoab(ns(ib))%im(:,ib)*dp_wf_b(:)+dp_wfa_rhoab(ns(ib))%im(:,ib)*wf_b(:))/2
+                  dsretjpz(:) = dsretjpz(:) + ns(ib)*aux%re(:)
+                  dsimtjpz(:) = dsimtjpz(:) + ns(ib)*aux%im(:)
 
-               ! s_z: z-component of vector density
-               dsresz(:) = dsresz(:) + ns(ib)*wf_wf_prod%re(:)
-               dsimsz(:) = dsimsz(:) + ns(ib)*wf_wf_prod%im(:)
+                  
+                  ! tau: kinetic density
+                  aux%re(:) = dr_wfa_rhoab(ns(ib))%re(:,ib)*dr_wf_b(:) + dp_wfa_rhoab(ns(ib))%re(:,ib)*dp_wf_b(:) &
+                            + dz_wfa_rhoab(ns(ib))%re(:,ib)*dz_wf_b(:)
+                  aux%im(:) = dr_wfa_rhoab(ns(ib))%im(:,ib)*dr_wf_b(:) + dp_wfa_rhoab(ns(ib))%im(:,ib)*dp_wf_b(:) &
+                            + dz_wfa_rhoab(ns(ib))%im(:,ib)*dz_wf_b(:)
+                  dsretau(:) = dsretau(:) + aux%re(:)
+                  dsimtau(:) = dsimtau(:) + aux%im(:)
+                  
+                  ! T_z: z-component of spin-kinetic density
+                  ! aux%re(:) = dr_wfa_rhoab(ns(ib))%re(:,ib)*dr_wf_b(:) + dp_wfa_rhoab(ns(ib))%re(:,ib)*dp_wf_b(:) &
+                  !           + dz_wfa_rhoab(ns(ib))%re(:,ib)*dz_wf_b(:)
+                  ! aux%im(:) = dr_wfa_rhoab(ns(ib))%im(:,ib)*dr_wf_b(:) + dp_wfa_rhoab(ns(ib))%im(:,ib)*dp_wf_b(:) &
+                  !           + dz_wfa_rhoab(ns(ib))%im(:,ib)*dz_wf_b(:)
+                  dsretz(:) = dsretz(:) + ns(ib)*aux%re(:)
+                  dsimtz(:) = dsimtz(:) + ns(ib)*aux%im(:)
+                  
+                  
+                  ! j_rho: rho-component of current density
+                  aux%re(:) = (wfa_rhoab(ns(ib))%re(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(ns(ib))%re(:,ib)*wf_b(:))/2
+                  aux%im(:) = (wfa_rhoab(ns(ib))%im(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(ns(ib))%im(:,ib)*wf_b(:))/2
+                  dsrejr(:) = dsrejr(:) - aux%im(:)
+                  dsimjr(:) = dsimjr(:) + aux%re(:)
+                  
+                  ! J_{rho,z}: (rho,z)-component of tensor density
+                  ! aux%re(:) = (wfa_rhoab(ns(ib))%re(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(ns(ib))%re(:,ib)*wf_b(:))/2
+                  ! aux%im(:) = (wfa_rhoab(ns(ib))%im(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(ns(ib))%im(:,ib)*wf_b(:))/2
+                  dsretjrz(:) = dsretjrz(:) - ns(ib)*aux%im(:)
+                  dsimtjrz(:) = dsimtjrz(:) + ns(ib)*aux%re(:)
+                  
+                  
+                  ! j_z: z-component of current density
+                  aux%re(:) = (wfa_rhoab(ns(ib))%re(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(ns(ib))%re(:,ib)*wf_b(:))/2
+                  aux%im(:) = (wfa_rhoab(ns(ib))%im(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(ns(ib))%im(:,ib)*wf_b(:))/2
+                  dsrejz(:) = dsrejz(:) - aux%im(:)
+                  dsimjz(:) = dsimjz(:) + aux%re(:)
 
-               ! j_phi: phi-component of current density
-               aux%re(:) = (wfa_rhoab(ns(ib))%re(:,iz)*dp_wf_b(:)+dp_wfa_rhoab(ns(ib))%re(:,iz)*wf_b(:))/2
-               aux%im(:) = (wfa_rhoab(ns(ib))%im(:,iz)*dp_wf_b(:)+dp_wfa_rhoab(ns(ib))%im(:,iz)*wf_b(:))/2
-               dsrejp(:) = dsrejp(:) + aux%re(:)
-               dsimjp(:) = dsimjp(:) + aux%im(:)
+                  ! J_{z,z}: (z,z)-component of tensor density
+                  ! aux%re(:) = (wfa_rhoab(ns(ib))%re(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(ns(ib))%re(:,ib)*wf_b(:))/2
+                  ! aux%im(:) = (wfa_rhoab(ns(ib))%im(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(ns(ib))%im(:,ib)*wf_b(:))/2
+                  dsretjzz(:) = dsretjzz(:) - ns(ib)*aux%im(:)
+                  dsimtjzz(:) = dsimtjzz(:) + ns(ib)*aux%re(:)
+                  
+                  ! Del.s: z-component of divergence of s
+                  aux%re(:) = wfa_rhoab(ns(ib))%re(:,ib)*dz_wf_b(:) + dz_wfa_rhoab(ns(ib))%re(:,ib)*wf_b(:)
+                  aux%im(:) = wfa_rhoab(ns(ib))%im(:,ib)*dz_wf_b(:) + dz_wfa_rhoab(ns(ib))%im(:,ib)*wf_b(:)
+                  dsregs(:) = dsregs(:) + ns(ib)*aux%re(:)
+                  dsimgs(:) = dsimgs(:) + ns(ib)*aux%im(:)
 
-               ! J_{phi,z}: (phi,z)-component of tensor density [= J_{2,3}/rho]
-               !aux%re(:) = (wfa_rhoab(ns(ib))%re(:,iz)*dp_wf_b(:)+dp_wfa_rhoab(ns(ib))%re(:,iz)*wf_b(:))/2
-               !aux%im(:) = (wfa_rhoab(ns(ib))%im(:,iz)*dp_wf_b(:)+dp_wfa_rhoab(ns(ib))%im(:,iz)*wf_b(:))/2
-               dsretjpz(:) = dsretjpz(:) + ns(ib)*aux%re(:)
-               dsimtjpz(:) = dsimtjpz(:) + ns(ib)*aux%im(:)
 
-               ! tau: kinetic density
-               aux%re(:) = dr_wfa_rhoab(ns(ib))%re(:,iz)*dr_wf_b(:) + dp_wfa_rhoab(ns(ib))%re(:,iz)*dp_wf_b(:) &
-                        + dz_wfa_rhoab(ns(ib))%re(:,iz)*dz_wf_b(:)
-               aux%im(:) = dr_wfa_rhoab(ns(ib))%im(:,iz)*dr_wf_b(:) + dp_wfa_rhoab(ns(ib))%im(:,iz)*dp_wf_b(:) &
-                        + dz_wfa_rhoab(ns(ib))%im(:,iz)*dz_wf_b(:)
-               dsretau(:) = dsretau(:) + aux%re(:)
-               dsimtau(:) = dsimtau(:) + aux%im(:)
+                  ! F_rho: rho-component of tensor-kinetic density
+                  aux%re(:) = dr_wfa_rhoab(ns(ib))%re(:,ib)*dz_wf_b(:) + dz_wfa_rhoab(ns(ib))%re(:,ib)*dr_wf_b(:)
+                  aux%im(:) = dr_wfa_rhoab(ns(ib))%im(:,ib)*dz_wf_b(:) + dz_wfa_rhoab(ns(ib))%im(:,ib)*dr_wf_b(:)
+                  dsrefr(:) = dsrefr(:) + ns(ib)*aux%re(:)/2
+                  dsimfr(:) = dsimfr(:) + ns(ib)*aux%im(:)/2
 
-               ! T_z: z-component of spin-kinetic density
-               ! aux%re(:) = dr_wfa_rhoab(ns(ib))%re(:,iz)*dr_wf_b(:) + dp_wfa_rhoab(ns(ib))%re(:,iz)*dp_wf_b(:) &
-               !           + dz_wfa_rhoab(ns(ib))%re(:,iz)*dz_wf_b(:)
-               ! aux%im(:) = dr_wfa_rhoab(ns(ib))%im(:,iz)*dr_wf_b(:) + dp_wfa_rhoab(ns(ib))%im(:,iz)*dp_wf_b(:) &
-               !           + dz_wfa_rhoab(ns(ib))%im(:,iz)*dz_wf_b(:)
-               dsretz(:) = dsretz(:) + ns(ib)*aux%re(:)
-               dsimtz(:) = dsimtz(:) + ns(ib)*aux%im(:)
+                  ! F_phi: phi-component of tensor-kinetic density
+                  aux%re(:) = dp_wfa_rhoab(ns(ib))%re(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(ns(ib))%re(:,ib)*dp_wf_b(:)
+                  aux%im(:) = dp_wfa_rhoab(ns(ib))%im(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(ns(ib))%im(:,ib)*dp_wf_b(:)
+                  dsrefp(:) = dsrefp(:) - ns(ib)*aux%im(:)/2
+                  dsimfp(:) = dsimfp(:) + ns(ib)*aux%re(:)/2
 
-               ! j_rho: rho-component of current density
-               aux%re(:) = (wfa_rhoab(ns(ib))%re(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(ns(ib))%re(:,iz)*wf_b(:))/2
-               aux%im(:) = (wfa_rhoab(ns(ib))%im(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(ns(ib))%im(:,iz)*wf_b(:))/2
-               dsrejr(:) = dsrejr(:) - aux%im(:)
-               dsimjr(:) = dsimjr(:) + aux%re(:)
+                  ! F_z: z-component of tensor-kinetic density
+                  aux%re(:) = dz_wfa_rhoab(ns(ib))%re(:,ib)*dz_wf_b(:)
+                  aux%im(:) = dz_wfa_rhoab(ns(ib))%im(:,ib)*dz_wf_b(:)
+                  dsrefz(:) = dsrefz(:) + ns(ib)*aux%re(:)
+                  dsimfz(:) = dsimfz(:) + ns(ib)*aux%im(:)
 
-               ! J_{rho,z}: (rho,z)-component of tensor density
-               ! aux%re(:) = (wfa_rhoab(ns(ib))%re(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(ns(ib))%re(:,iz)*wf_b(:))/2
-               ! aux%im(:) = (wfa_rhoab(ns(ib))%im(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(ns(ib))%im(:,iz)*wf_b(:))/2
-               dsretjrz(:) = dsretjrz(:) - ns(ib)*aux%im(:)
-               dsimtjrz(:) = dsimtjrz(:) + ns(ib)*aux%re(:)
 
-               ! j_z: z-component of current density
-               aux%re(:) = (wfa_rhoab(ns(ib))%re(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(ns(ib))%re(:,iz)*wf_b(:))/2
-               aux%im(:) = (wfa_rhoab(ns(ib))%im(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(ns(ib))%im(:,iz)*wf_b(:))/2
-               dsrejz(:) = dsrejz(:) - aux%im(:)
-               dsimjz(:) = dsimjz(:) + aux%re(:)
+               ! Not-diagonal in spin
+               wf_wf_prod%re(:) = wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:)
+               wf_wf_prod%im(:) = wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:)
 
-               ! J_{z,z}: (z,z)-component of tensor density
-               ! aux%re(:) = (wfa_rhoab(ns(ib))%re(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(ns(ib))%re(:,iz)*wf_b(:))/2
-               ! aux%im(:) = (wfa_rhoab(ns(ib))%im(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(ns(ib))%im(:,iz)*wf_b(:))/2
-               dsretjzz(:) = dsretjzz(:) - ns(ib)*aux%im(:)
-               dsimtjzz(:) = dsimtjzz(:) + ns(ib)*aux%re(:)
+                  ! |a> = |+>,  |b> = |->
+                  if (ns(ib) == -1) then
 
-               ! Del.s: z-component of divergence of s
-               aux%re(:) = wfa_rhoab(ns(ib))%re(:,iz)*dz_wf_b(:) + dz_wfa_rhoab(ns(ib))%re(:,iz)*wf_b(:)
-               aux%im(:) = wfa_rhoab(ns(ib))%im(:,iz)*dz_wf_b(:) + dz_wfa_rhoab(ns(ib))%im(:,iz)*wf_b(:)
-               dsregs(:) = dsregs(:) + ns(ib)*aux%re(:)
-               dsimgs(:) = dsimgs(:) + ns(ib)*aux%im(:)
+                     ! s_rho: rho-component of vector density
+                     dsresr(:) = dsresr(:) + wf_wf_prod%re(:)
+                     dsimsr(:) = dsimsr(:) + wf_wf_prod%im(:)
 
-               ! F_rho: rho-component of tensor-kinetic density
-               aux%re(:) = dr_wfa_rhoab(ns(ib))%re(:,iz)*dz_wf_b(:) + dz_wfa_rhoab(ns(ib))%re(:,iz)*dr_wf_b(:)
-               aux%im(:) = dr_wfa_rhoab(ns(ib))%im(:,iz)*dz_wf_b(:) + dz_wfa_rhoab(ns(ib))%im(:,iz)*dr_wf_b(:)
-               dsrefr(:) = dsrefr(:) + ns(ib)*aux%re(:)/2
-               dsimfr(:) = dsimfr(:) + ns(ib)*aux%im(:)/2
+                     ! s_phi: phi-component of vector density
+                     dsresp(:) = dsresp(:) - wf_wf_prod%im(:)
+                     dsimsp(:) = dsimsp(:) + wf_wf_prod%re(:)
+                     
+                     ! J_{phi,rho}: (phi,rho)-component of tensor density [= J_{2,1}/rho]
+                     aux%re(:) = (dp_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:) + wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:))/2
+                     aux%im(:) = (dp_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:) + wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:))/2
+                     dsretjpr(:) = dsretjpr(:) + aux%re(:)
+                     dsimtjpr(:) = dsimtjpr(:) + aux%im(:)
 
-               ! F_phi: phi-component of tensor-kinetic density
-               aux%re(:) = dp_wfa_rhoab(ns(ib))%re(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(ns(ib))%re(:,iz)*dp_wf_b(:)
-               aux%im(:) = dp_wfa_rhoab(ns(ib))%im(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(ns(ib))%im(:,iz)*dp_wf_b(:)
-               dsrefp(:) = dsrefp(:) - ns(ib)*aux%im(:)/2
-               dsimfp(:) = dsimfp(:) + ns(ib)*aux%re(:)/2
+                     ! J_{phi,phi}: (phi,phi)-component of tensor density [= J_{2,2}/rho^2]
+                     ! aux%re(:) = (dp_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:) + wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:))/2
+                     ! aux%im(:) = (dp_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:) + wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:))/2
+                     dsretjpp(:) = dsretjpp(:) - aux%im(:)
+                     dsimtjpp(:) = dsimtjpp(:) + aux%re(:)
+                     
+                     ! Del.s: phi-component of divergence of s
+                     aux%re(:) = wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:) - dp_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:) !&
+                              !  - y(:)*wf_wf_prod%re(:)
+                     aux%im(:) = wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:) - dp_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:) !&
+                              !  - y(:)*wf_wf_prod%im(:)
+                     dsregs(:) = dsregs(:) + aux%re(:)
+                     dsimgs(:) = dsimgs(:) + aux%im(:)
+                     
+                     
+                     ! T_rho: rho-component of spin-kinetic density
+                     aux%re(:) = dr_wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:) &
+                               + dz_wfa_rhoab(-ns(ib))%re(:,ib)*dz_wf_b(:)
+                     aux%im(:) = dr_wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:) &
+                               + dz_wfa_rhoab(-ns(ib))%im(:,ib)*dz_wf_b(:)
+                     dsretr(:) = dsretr(:) + aux%re(:)
+                     dsimtr(:) = dsimtr(:) + aux%im(:)
 
-               ! F_z: z-component of tensor-kinetic density
-               aux%re(:) = dz_wfa_rhoab(ns(ib))%re(:,iz)*dz_wf_b(:)
-               aux%im(:) = dz_wfa_rhoab(ns(ib))%im(:,iz)*dz_wf_b(:)
-               dsrefz(:) = dsrefz(:) + ns(ib)*aux%re(:)
-               dsimfz(:) = dsimfz(:) + ns(ib)*aux%im(:)
-            
-            end if
+                     ! T_phi: phi-component of spin-kinetic density
+                     ! aux%re(:) = dr_wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:) &
+                     !           + dz_wfa_rhoab(-ns(ib))%re(:,ib)*dz_wf_b(:)
+                     ! aux%im(:) = dr_wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:) &
+                     !           + dz_wfa_rhoab(-ns(ib))%im(:,ib)*dz_wf_b(:)
+                     dsretp(:) = dsretp(:) - aux%im(:)
+                     dsimtp(:) = dsimtp(:) + aux%re(:)
 
-            ! Not-diagonal in spin
 
-            ! |a> = |+>,  |b> = |->
-            ! Condition below ensures no calc when no |a> with the required spin exists
-            if ((ns(ib) == -1) .and. (num_spin_up(ix)>0)) then ! (*)
+                     ! J_{rho,rho}: (rho,rho)-component of tensor density
+                     aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:))/2
+                     aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:))/2
+                     dsretjrr(:) = dsretjrr(:) - aux%im(:)
+                     dsimtjrr(:) = dsimtjrr(:) + aux%re(:)
 
-               ! Auxiliary array
-               wf_wf_prod%re(:) = wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:)
-               wf_wf_prod%im(:) = wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:)
+                     ! J_{rho,phi}: (rho,phi)-component of tensor density [= J_{1,2}/rho]
+                     ! aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:))/2
+                     ! aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:))/2
+                     dsretjrp(:) = dsretjrp(:) - aux%re(:)
+                     dsimtjrp(:) = dsimtjrp(:) - aux%im(:)
+                     
+                     
+                     ! Del.s: rho-component of divergence of s
+                     aux%re(:) = wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:) + dr_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:) !&
+                              !  + y(:)*wf_wf_prod%re(:)
+                     aux%im(:) = wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:) + dr_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:) !&
+                              !  + y(:)*wf_wf_prod%im(:)
+                     dsregs(:) = dsregs(:) + aux%re(:)
+                     dsimgs(:) = dsimgs(:) + aux%im(:)
+                     
+                     
+                     ! J_{z,rho}: (z,rho)-component of tensor density
+                     aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:))/2
+                     aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:))/2
+                     dsretjzr(:) = dsretjzr(:) - aux%im(:)
+                     dsimtjzr(:) = dsimtjzr(:) + aux%re(:)
 
-               ! s_rho: rho-component of vector density
-               dsresr(:) = dsresr(:) + wf_wf_prod%re(:)
-               dsimsr(:) = dsimsr(:) + wf_wf_prod%im(:)
+                     ! J_{z,phi}: (z,phi)-component of tensor density [= J_{3,2}/rho]
+                     ! aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:))/2
+                     ! aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:))/2
+                     dsretjzp(:) = dsretjzp(:) - aux%re(:)
+                     dsimtjzp(:) = dsimtjzp(:) - aux%im(:)
 
-               ! s_phi: phi-component of vector density
-               dsresp(:) = dsresp(:) - wf_wf_prod%im(:)
-               dsimsp(:) = dsimsp(:) + wf_wf_prod%re(:)
 
-               ! J_{phi,rho}: (phi,rho)-component of tensor density [= J_{2,1}/rho]
-               aux%re(:) = (dp_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:) + wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:))/2
-               aux%im(:) = (dp_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:) + wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:))/2
-               dsretjpr(:) = dsretjpr(:) + aux%re(:)
-               dsimtjpr(:) = dsimtjpr(:) + aux%im(:)
+                     ! F_rho: rho-component of tensor-kinetic density
+                     aux%re(:) = dr_wfa_rhoab(-ns(ib))%re(:,ib)*(dr_wf_b(:) + 0.5_dp*dp_wf_b(:)) &
+                               - 0.5_dp*dp_wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:)
+                     aux%im(:) = dr_wfa_rhoab(-ns(ib))%im(:,ib)*(dr_wf_b(:) + 0.5_dp*dp_wf_b(:)) &
+                               - 0.5_dp*dp_wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:)
+                     dsrefr(:) = dsrefr(:) + aux%re(:)
+                     dsimfr(:) = dsimfr(:) + aux%im(:)
 
-               ! J_{phi,phi}: (phi,phi)-component of tensor density [= J_{2,2}/rho^2]
-               ! aux%re(:) = (dp_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:) + wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:))/2
-               ! aux%im(:) = (dp_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:) + wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:))/2
-               dsretjpp(:) = dsretjpp(:) - aux%im(:)
-               dsimtjpp(:) = dsimtjpp(:) + aux%re(:)
+                     ! F_phi: phi-component of tensor-kinetic density
+                     aux%re(:) = dp_wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:) &
+                               + 0.5_dp*(dp_wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:))
+                     aux%im(:) = dp_wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:) &
+                               + 0.5_dp*(dp_wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:))
+                     dsrefp(:) = dsrefp(:) - aux%im(:)
+                     dsimfp(:) = dsimfp(:) + aux%re(:)
 
-               ! Del.s: phi-component of divergence of s
-               aux%re(:) = wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:) - dp_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:) !&
-                        !  - y(:)*wf_wf_prod%re(:)
-               aux%im(:) = wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:) - dp_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:) !&
-                        !  - y(:)*wf_wf_prod%im(:)
-               dsregs(:) = dsregs(:) + aux%re(:)
-               dsimgs(:) = dsimgs(:) + aux%im(:)
+                     ! F_z: z-component of tensor-kinetic density
+                     aux%re(:) = dz_wfa_rhoab(-ns(ib))%re(:,ib)*(dr_wf_b(:) + dp_wf_b(:)) &
+                               + dr_wfa_rhoab(-ns(ib))%re(:,ib)*dz_wf_b(:) - dp_wfa_rhoab(-ns(ib))%re(:,ib)*dz_wf_b(:)
+                     aux%im(:) = dz_wfa_rhoab(-ns(ib))%im(:,ib)*(dr_wf_b(:) + dp_wf_b(:)) &
+                               + dr_wfa_rhoab(-ns(ib))%im(:,ib)*dz_wf_b(:) - dp_wfa_rhoab(-ns(ib))%im(:,ib)*dz_wf_b(:)
+                     dsrefz(:) = dsrefz(:) + aux%re(:)/2
+                     dsimfz(:) = dsimfz(:) + aux%im(:)/2
 
-               ! T_rho: rho-component of spin-kinetic density
-               aux%re(:) = dr_wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:) &
-                        + dz_wfa_rhoab(-ns(ib))%re(:,iz)*dz_wf_b(:)
-               aux%im(:) = dr_wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:) &
-                        + dz_wfa_rhoab(-ns(ib))%im(:,iz)*dz_wf_b(:)
-               dsretr(:) = dsretr(:) + aux%re(:)
-               dsimtr(:) = dsimtr(:) + aux%im(:)
+                  ! |a> = |->,  |b> = |+>
+                   else if (ns(ib) == 1) then
 
-               ! T_phi: phi-component of spin-kinetic density
-               ! aux%re(:) = dr_wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:) &
-               !           + dz_wfa_rhoab(-ns(ib))%re(:,iz)*dz_wf_b(:)
-               ! aux%im(:) = dr_wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:) &
-               !           + dz_wfa_rhoab(-ns(ib))%im(:,iz)*dz_wf_b(:)
-               dsretp(:) = dsretp(:) - aux%im(:)
-               dsimtp(:) = dsimtp(:) + aux%re(:)
+                     ! s_rho: rho-component of vector density
+                     dsresr(:) = dsresr(:) + wf_wf_prod%re(:)
+                     dsimsr(:) = dsimsr(:) + wf_wf_prod%im(:)
 
-               ! J_{rho,rho}: (rho,rho)-component of tensor density
-               aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:))/2
-               aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:))/2
-               dsretjrr(:) = dsretjrr(:) - aux%im(:)
-               dsimtjrr(:) = dsimtjrr(:) + aux%re(:)
+                     ! s_phi: phi-component of vector density
+                     dsresp(:) = dsresp(:) + wf_wf_prod%im(:)
+                     dsimsp(:) = dsimsp(:) - wf_wf_prod%re(:)
 
-               ! J_{rho,phi}: (rho,phi)-component of tensor density [= J_{1,2}/rho]
-               ! aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:))/2
-               ! aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:))/2
-               dsretjrp(:) = dsretjrp(:) - aux%re(:)
-               dsimtjrp(:) = dsimtjrp(:) - aux%im(:)
+                     ! J_{phi,rho}: (phi,rho)-component of tensor density [= J_{2,1}/rho]
+                     aux%re(:) = (dp_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:) + wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:))/2
+                     aux%im(:) = (dp_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:) + wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:))/2
+                     dsretjpr(:) = dsretjpr(:) + aux%re(:)
+                     dsimtjpr(:) = dsimtjpr(:) + aux%im(:)
 
-               ! Del.s: rho-component of divergence of s
-               aux%re(:) = wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:) + dr_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:) !&
-                        !  + y(:)*wf_wf_prod%re(:)
-               aux%im(:) = wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:) + dr_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:) !&
-                        !  + y(:)*wf_wf_prod%im(:)
-               dsregs(:) = dsregs(:) + aux%re(:)
-               dsimgs(:) = dsimgs(:) + aux%im(:)
+                     ! J_{phi,phi}: (phi,phi)-component of tensor density [= J_{2,2}/rho]
+                     ! aux%re(:) = (dp_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:) + wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:))/2
+                     ! aux%im(:) = (dp_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:) + wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:))/2
+                     dsretjpp(:) = dsretjpp(:) + aux%im(:)
+                     dsimtjpp(:) = dsimtjpp(:) - aux%re(:)
+                     
+                     ! Del.s: phi-component of divergence of s
+                     aux%re(:) = wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:) - dp_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:) !&
+                              !  + y(:)*wf_wf_prod%re(:)
+                     aux%im(:) = wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:) - dp_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:) !&
+                              !  + y(:)*wf_wf_prod%im(:)
+                     dsregs(:) = dsregs(:) - aux%re(:)
+                     dsimgs(:) = dsimgs(:) - aux%im(:)
+                     
+                     
+                     ! T_rho: rho-component of spin-kinetic density
+                     aux%re(:) = dr_wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:) &
+                               + dz_wfa_rhoab(-ns(ib))%re(:,ib)*dz_wf_b(:)
+                     aux%im(:) = dr_wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:) &
+                               + dz_wfa_rhoab(-ns(ib))%im(:,ib)*dz_wf_b(:)
+                     dsretr(:) = dsretr(:) + aux%re(:)
+                     dsimtr(:) = dsimtr(:) + aux%im(:)
 
-               ! J_{z,rho}: (z,rho)-component of tensor density
-               aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:))/2
-               aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:))/2
-               dsretjzr(:) = dsretjzr(:) - aux%im(:)
-               dsimtjzr(:) = dsimtjzr(:) + aux%re(:)
+                     ! T_phi: phi-component of spin-kinetic density
+                     ! aux%re(:) = dr_wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:) &
+                     !           + dz_wfa_rhoab(-ns(ib))%re(:,ib)*dz_wf_b(:)
+                     ! aux%im(:) = dr_wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:) &
+                     !           + dz_wfa_rhoab(-ns(ib))%im(:,ib)*dz_wf_b(:)
+                     dsretp(:) = dsretp(:) + aux%im(:)
+                     dsimtp(:) = dsimtp(:) - aux%re(:)
+                     
+                     
+                     ! J_{rho,rho}: (rho,rho)-component of tensor density
+                     aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:))/2
+                     aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:))/2
+                     dsretjrr(:) = dsretjrr(:) - aux%im(:)
+                     dsimtjrr(:) = dsimtjrr(:) + aux%re(:)
 
-               ! J_{z,phi}: (z,phi)-component of tensor density [= J_{3,2}/rho]
-               ! aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:))/2
-               ! aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:))/2
-               dsretjzp(:) = dsretjzp(:) - aux%re(:)
-               dsimtjzp(:) = dsimtjzp(:) - aux%im(:)
+                     ! J_{rho,phi}: (rho,phi)-component of tensor density [= J_{1,2}/rho]
+                     ! aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:))/2
+                     ! aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:))/2
+                     dsretjrp(:) = dsretjrp(:) + aux%re(:)
+                     dsimtjrp(:) = dsimtjrp(:) + aux%im(:)
 
-               ! F_rho: rho-component of tensor-kinetic density
-               aux%re(:) = dr_wfa_rhoab(-ns(ib))%re(:,iz)*(dr_wf_b(:) + 0.5_dp*dp_wf_b(:)) &
-                        - 0.5_dp*dp_wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:)
-               aux%im(:) = dr_wfa_rhoab(-ns(ib))%im(:,iz)*(dr_wf_b(:) + 0.5_dp*dp_wf_b(:)) &
-                        - 0.5_dp*dp_wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:)
-               dsrefr(:) = dsrefr(:) + aux%re(:)
-               dsimfr(:) = dsimfr(:) + aux%im(:)
 
-               ! F_phi: phi-component of tensor-kinetic density
-               aux%re(:) = dp_wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:) &
-                        + 0.5_dp*(dp_wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:))
-               aux%im(:) = dp_wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:) &
-                        + 0.5_dp*(dp_wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:))
-               dsrefp(:) = dsrefp(:) - aux%im(:)
-               dsimfp(:) = dsimfp(:) + aux%re(:)
+                     ! Del.s: rho-component of divergence of s
+                     aux%re(:) = wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:) + dr_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:) !&
+                              !  + y(:)*wf_wf_prod%re(:)
+                     aux%im(:) = wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:) + dr_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:) !&
+                              !  + y(:)*wf_wf_prod%im(:)
+                     dsregs(:) = dsregs(:) + aux%re(:)
+                     dsimgs(:) = dsimgs(:) + aux%im(:)
+                     
+                  
+                     ! J_{z,rho}: (z,rho)-component of tensor density
+                     aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:))/2
+                     aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:))/2
+                     dsretjzr(:) = dsretjzr(:) - aux%im(:)
+                     dsimtjzr(:) = dsimtjzr(:) + aux%re(:)
 
-               ! F_z: z-component of tensor-kinetic density
-               aux%re(:) = dz_wfa_rhoab(-ns(ib))%re(:,iz)*(dr_wf_b(:) + dp_wf_b(:)) &
-                        + dr_wfa_rhoab(-ns(ib))%re(:,iz)*dz_wf_b(:) - dp_wfa_rhoab(-ns(ib))%re(:,iz)*dz_wf_b(:)
-               aux%im(:) = dz_wfa_rhoab(-ns(ib))%im(:,iz)*(dr_wf_b(:) + dp_wf_b(:)) &
-                        + dr_wfa_rhoab(-ns(ib))%im(:,iz)*dz_wf_b(:) - dp_wfa_rhoab(-ns(ib))%im(:,iz)*dz_wf_b(:)
-               dsrefz(:) = dsrefz(:) + aux%re(:)/2
-               dsimfz(:) = dsimfz(:) + aux%im(:)/2
+                     ! J_{z,phi}: (z,phi)-component of tensor density [= J_{3,2}/rho]
+                     ! aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%re(:,ib)*wf_b(:))/2
+                     ! aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,ib)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%im(:,ib)*wf_b(:))/2
+                     dsretjzp(:) = dsretjzp(:) + aux%re(:)
+                     dsimtjzp(:) = dsimtjzp(:) + aux%im(:)
 
-            ! |a> = |->,  |b> = |+>
-            ! Condition below ensures no calc when no |a> with the required spin exists
-            else if ((ns(ib) == +1) .and. (num_spin_dw(ix)>0)) then ! (*)
 
-               ! Auxiliary array
-               wf_wf_prod%re(:) = wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:)
-               wf_wf_prod%im(:) = wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:)
+                     ! F_rho: rho-component of tensor-kinetic density
+                     aux%re(:) = dr_wfa_rhoab(-ns(ib))%re(:,ib)*(dr_wf_b(:) - 0.5_dp*dp_wf_b(:)) &
+                               + 0.5_dp*dp_wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:)
+                     aux%im(:) = dr_wfa_rhoab(-ns(ib))%im(:,ib)*(dr_wf_b(:) - 0.5_dp*dp_wf_b(:)) &
+                               + 0.5_dp*dp_wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:)
+                     dsrefr(:) = dsrefr(:) + aux%re(:)
+                     dsimfr(:) = dsimfr(:) + aux%im(:)
 
-               ! s_rho: rho-component of vector density
-               dsresr(:) = dsresr(:) + wf_wf_prod%re(:)
-               dsimsr(:) = dsimsr(:) + wf_wf_prod%im(:)
+                     ! F_phi: phi-component of tensor-kinetic density
+                     aux%re(:) = -dp_wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:) &
+                               + 0.5_dp*(dp_wfa_rhoab(-ns(ib))%re(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%re(:,ib)*dp_wf_b(:))
+                     aux%im(:) = -dp_wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:) &
+                               + 0.5_dp*(dp_wfa_rhoab(-ns(ib))%im(:,ib)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%im(:,ib)*dp_wf_b(:))
+                     dsrefp(:) = dsrefp(:) - aux%im(:)
+                     dsimfp(:) = dsimfp(:) + aux%re(:)
 
-               ! s_phi: phi-component of vector density
-               dsresp(:) = dsresp(:) + wf_wf_prod%im(:)
-               dsimsp(:) = dsimsp(:) - wf_wf_prod%re(:)
+                     ! F_z: z-component of tensor-kinetic density
+                     aux%re(:) = dz_wfa_rhoab(-ns(ib))%re(:,ib)*(dr_wf_b(:) - dp_wf_b(:)) &
+                               + dr_wfa_rhoab(-ns(ib))%re(:,ib)*dz_wf_b(:) + dp_wfa_rhoab(-ns(ib))%re(:,ib)*dz_wf_b(:)
+                     aux%im(:) = dz_wfa_rhoab(-ns(ib))%im(:,ib)*(dr_wf_b(:) - dp_wf_b(:)) &
+                               + dr_wfa_rhoab(-ns(ib))%im(:,ib)*dz_wf_b(:) + dp_wfa_rhoab(-ns(ib))%im(:,ib)*dz_wf_b(:)
+                     dsrefz(:) = dsrefz(:) + aux%re(:)/2
+                     dsimfz(:) = dsimfz(:) + aux%im(:)/2
 
-               ! J_{phi,rho}: (phi,rho)-component of tensor density [= J_{2,1}/rho]
-               aux%re(:) = (dp_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:) + wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:))/2
-               aux%im(:) = (dp_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:) + wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:))/2
-               dsretjpr(:) = dsretjpr(:) + aux%re(:)
-               dsimtjpr(:) = dsimtjpr(:) + aux%im(:)
+                  else
+                     call abort(' Inconsistent spin in helpers.density')
+                  end if
 
-               ! J_{phi,phi}: (phi,phi)-component of tensor density [= J_{2,2}/rho]
-               ! aux%re(:) = (dp_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:) + wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:))/2
-               ! aux%im(:) = (dp_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:) + wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:))/2
-               dsretjpp(:) = dsretjpp(:) + aux%im(:)
-               dsimtjpp(:) = dsimtjpp(:) - aux%re(:)
-
-               ! Del.s: phi-component of divergence of s
-               aux%re(:) = wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:) - dp_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:) !&
-                        !  + y(:)*wf_wf_prod%re(:)
-               aux%im(:) = wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:) - dp_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:) !&
-                        !  + y(:)*wf_wf_prod%im(:)
-               dsregs(:) = dsregs(:) - aux%re(:)
-               dsimgs(:) = dsimgs(:) - aux%im(:)
-
-               ! T_rho: rho-component of spin-kinetic density
-               aux%re(:) = dr_wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:) &
-                        + dz_wfa_rhoab(-ns(ib))%re(:,iz)*dz_wf_b(:)
-               aux%im(:) = dr_wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:) &
-                        + dz_wfa_rhoab(-ns(ib))%im(:,iz)*dz_wf_b(:)
-               dsretr(:) = dsretr(:) + aux%re(:)
-               dsimtr(:) = dsimtr(:) + aux%im(:)
-
-               ! T_phi: phi-component of spin-kinetic density
-               ! aux%re(:) = dr_wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:) &
-               !           + dz_wfa_rhoab(-ns(ib))%re(:,iz)*dz_wf_b(:)
-               ! aux%im(:) = dr_wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:) + dp_wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:) &
-               !           + dz_wfa_rhoab(-ns(ib))%im(:,iz)*dz_wf_b(:)
-               dsretp(:) = dsretp(:) + aux%im(:)
-               dsimtp(:) = dsimtp(:) - aux%re(:)
-
-               ! J_{rho,rho}: (rho,rho)-component of tensor density
-               aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:))/2
-               aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:))/2
-               dsretjrr(:) = dsretjrr(:) - aux%im(:)
-               dsimtjrr(:) = dsimtjrr(:) + aux%re(:)
-
-               ! J_{rho,phi}: (rho,phi)-component of tensor density [= J_{1,2}/rho]
-               ! aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:))/2
-               ! aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:))/2
-               dsretjrp(:) = dsretjrp(:) + aux%re(:)
-               dsimtjrp(:) = dsimtjrp(:) + aux%im(:)
-
-               ! Del.s: rho-component of divergence of s
-               aux%re(:) = wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:) + dr_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:) !&
-                        !  + y(:)*wf_wf_prod%re(:)
-               aux%im(:) = wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:) + dr_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:) !&
-                        !  + y(:)*wf_wf_prod%im(:)
-               dsregs(:) = dsregs(:) + aux%re(:)
-               dsimgs(:) = dsimgs(:) + aux%im(:)
-
-               ! J_{z,rho}: (z,rho)-component of tensor density
-               aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:))/2
-               aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:))/2
-               dsretjzr(:) = dsretjzr(:) - aux%im(:)
-               dsimtjzr(:) = dsimtjzr(:) + aux%re(:)
-
-               ! J_{z,phi}: (z,phi)-component of tensor density [= J_{3,2}/rho]
-               ! aux%re(:) = (wfa_rhoab(-ns(ib))%re(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%re(:,iz)*wf_b(:))/2
-               ! aux%im(:) = (wfa_rhoab(-ns(ib))%im(:,iz)*dz_wf_b(:) - dz_wfa_rhoab(-ns(ib))%im(:,iz)*wf_b(:))/2
-               dsretjzp(:) = dsretjzp(:) + aux%re(:)
-               dsimtjzp(:) = dsimtjzp(:) + aux%im(:)
-
-               ! F_rho: rho-component of tensor-kinetic density
-               aux%re(:) = dr_wfa_rhoab(-ns(ib))%re(:,iz)*(dr_wf_b(:) - 0.5_dp*dp_wf_b(:)) &
-                        + 0.5_dp*dp_wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:)
-               aux%im(:) = dr_wfa_rhoab(-ns(ib))%im(:,iz)*(dr_wf_b(:) - 0.5_dp*dp_wf_b(:)) &
-                        + 0.5_dp*dp_wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:)
-               dsrefr(:) = dsrefr(:) + aux%re(:)
-               dsimfr(:) = dsimfr(:) + aux%im(:)
-
-               ! F_phi: phi-component of tensor-kinetic density
-               aux%re(:) = -dp_wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:) &
-                        + 0.5_dp*(dp_wfa_rhoab(-ns(ib))%re(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%re(:,iz)*dp_wf_b(:))
-               aux%im(:) = -dp_wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:) &
-                        + 0.5_dp*(dp_wfa_rhoab(-ns(ib))%im(:,iz)*dr_wf_b(:) - dr_wfa_rhoab(-ns(ib))%im(:,iz)*dp_wf_b(:))
-               dsrefp(:) = dsrefp(:) - aux%im(:)
-               dsimfp(:) = dsimfp(:) + aux%re(:)
-
-               ! F_z: z-component of tensor-kinetic density
-               aux%re(:) = dz_wfa_rhoab(-ns(ib))%re(:,iz)*(dr_wf_b(:) - dp_wf_b(:)) &
-                        + dr_wfa_rhoab(-ns(ib))%re(:,iz)*dz_wf_b(:) + dp_wfa_rhoab(-ns(ib))%re(:,iz)*dz_wf_b(:)
-               aux%im(:) = dz_wfa_rhoab(-ns(ib))%im(:,iz)*(dr_wf_b(:) - dp_wf_b(:)) &
-                        + dr_wfa_rhoab(-ns(ib))%im(:,iz)*dz_wf_b(:) + dp_wfa_rhoab(-ns(ib))%im(:,iz)*dz_wf_b(:)
-               dsrefz(:) = dsrefz(:) + aux%re(:)/2
-               dsimfz(:) = dsimfz(:) + aux%im(:)/2
-
-            ! else
-               ! call abort(' Inconsistent spin in helpers.density')
-            end if
-
-         end do ! iz, sp state in one block
-         !!$OMP END PARALLEL DO
-
-      end do ! ix, block index
-
+      end do
+      !!$OMP END PARALLEL DO
+      
       ! The same for pairing densities (separate loop because kappas have
       ! a different block structure than rho)
       
@@ -594,105 +592,88 @@ contains
       ! \breve\rho(r s t, r' s' t') = (-2s')(-2t') \sum_{ab} \kappa_{ab}
       !                                   x \phi_a(r s t) \phi_b(r' -s' -t')
       !-------------------------------------------------------------------------
-
-      ! Loop over blocks
+      
+      do ix = -1, 1, 2
+         call allocate_init_2darray(wfa_rhoab(ix),nghl,dqp)
+      end do
+      
+      ! Calculate Sum_a wf_a * kappa_ab
+      ! Use OpenMP-enabled BLAS library to achieve best performance
       do ix = 1, nb
          iy = rek%ir2c(ix)
          if (iy==0) cycle
-
-         ! Calculate Sum_a wf_a * kappa_ab
-         ! Use OpenMP-enabled BLAS library to achieve best performance
          ia = isstart(ix)
+         ib = isstart(iy)
 
          ! wf_a has spin up
          if (num_spin_up(ix)>0) then
             call dgemm('N','N',nghl,db(iy),num_spin_up(ix),1.0_dp,wf(1,ia),nghl,&
-                       rek%elem(rek%ir2m(ix)),db(ix),0.0_dp,wfa_rhoab(1)%re(1,1),nghl)
+                       rek%elem(rek%ir2m(ix)),db(ix),0.0_dp,wfa_rhoab(1)%re(1,ib),nghl)
             call dgemm('N','N',nghl,db(iy),num_spin_up(ix),1.0_dp,wf(1,ia),nghl,&
-                       imk%elem(imk%ir2m(ix)),db(ix),0.0_dp,wfa_rhoab(1)%im(1,1),nghl)
+                       imk%elem(imk%ir2m(ix)),db(ix),0.0_dp,wfa_rhoab(1)%im(1,ib),nghl)
          end if
 
          ! wf_a has spin down
-         if (num_spin_dw(ix)>0) then
-            ia = ia + num_spin_up(ix)
-            call dgemm('N','N',nghl,db(iy),num_spin_dw(ix),1.0_dp,wf(1,ia),nghl,&
-                       rek%elem(rek%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,wfa_rhoab(-1)%re(1,1),nghl)
-            call dgemm('N','N',nghl,db(iy),num_spin_dw(ix),1.0_dp,wf(1,ia),nghl,&
-                       imk%elem(imk%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,wfa_rhoab(-1)%im(1,1),nghl)
+         if (db(ix)-num_spin_up(ix)>0) then
+            call dgemm('N','N',nghl,db(iy),db(ix)-num_spin_up(ix),1.0_dp,wf(1,ia+num_spin_up(ix)),nghl,&
+                       rek%elem(rek%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,wfa_rhoab(-1)%re(1,ib),nghl)
+            call dgemm('N','N',nghl,db(iy),db(ix)-num_spin_up(ix),1.0_dp,wf(1,ia+num_spin_up(ix)),nghl,&
+                       imk%elem(imk%ir2m(ix)+num_spin_up(ix)),db(ix),0.0_dp,wfa_rhoab(-1)%im(1,ib),nghl)
          end if
+      end do
 
-         ! Calculate local pairing densities in coordinate space
-         !!$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(iy,isstart,db,ns,wf,wfa_rhoab)    &
-         !!$OMP& REDUCTION(+:dsrerb)  REDUCTION(+:dsimrb)  REDUCTION(+:dsresbr) REDUCTION(+:dsimsbr) &
-         !!$OMP& REDUCTION(+:dsresbp) REDUCTION(+:dsimsbp) REDUCTION(+:dsresbz) REDUCTION(+:dsimsbz)
-         do iz = 1, db(iy)
+      !! Calculate local pairing densities in coordinate space
+      !!$OMP PARALLEL DO DEFAULT(PRIVATE) SHARED(ns,wf,wfa_rhoab)    &
+      !!$OMP& REDUCTION(+:dsrerb)  REDUCTION(+:dsimrb)  REDUCTION(+:dsresbr) REDUCTION(+:dsimsbr) &
+      !!$OMP& REDUCTION(+:dsresbp) REDUCTION(+:dsimsbp) REDUCTION(+:dsresbz) REDUCTION(+:dsimsbz)
+      do ib = 1, dqp
 
-            ! Column vector |b>
-            ib = isstart(iy)+iz-1
-            wf_b => wf(:, ib)
+         ! Column vector |b>
+         wf_b = wf(:, ib)
 
-            ! Diagonal in spin
-            ! ns(ia) == -ns(ib), note the sign flip w.r.t. normal densities
-            ! |a> = |+>,  |b> = |->; or |a> = |->,  |b> = |+>
-            ! Condition below ensures no calc when no |a> with the required spin exists
-            if (((ns(ib) == -1) .and. (num_spin_up(ix)>0)) .or. &
-                ((ns(ib) == +1) .and. (num_spin_dw(ix)>0))) then ! (*)
-               
-               ! Auxiliary array
-               wf_wf_prod%re = 2*wfa_rhoab(-ns(ib))%re(:,iz)*wf_b
-               wf_wf_prod%im = 2*wfa_rhoab(-ns(ib))%im(:,iz)*wf_b
+         ! Diagonal in spin
+         ! ns(ia) == -ns(ib), note the sign flip w.r.t. normal densities
+            wf_wf_prod%re = 2*wfa_rhoab(-ns(ib))%re(:,ib)*wf_b
+            wf_wf_prod%im = 2*wfa_rhoab(-ns(ib))%im(:,ib)*wf_b
 
-               ! rho-breve_10
-               dsrerb = dsrerb - ns(ib)*wf_wf_prod%re
-               dsimrb = dsimrb - ns(ib)*wf_wf_prod%im
-                  
-               ! s-breve_0,z
-               dsresbz = dsresbz + wf_wf_prod%re
-               dsimsbz = dsimsbz + wf_wf_prod%im
+            ! rho-breve_10
+            dsrerb = dsrerb - ns(ib)*wf_wf_prod%re
+            dsimrb = dsimrb - ns(ib)*wf_wf_prod%im
+            
+            ! s-breve_0,z
+            dsresbz = dsresbz + wf_wf_prod%re
+            dsimsbz = dsimsbz + wf_wf_prod%im
 
-            end if
-
-            ! Not-diagonal in spin
+         ! Not-diagonal in spin
+            wf_wf_prod%re = 2*wfa_rhoab(ns(ib))%re(:,ib)*wf_b
+            wf_wf_prod%im = 2*wfa_rhoab(ns(ib))%im(:,ib)*wf_b
 
             ! |a> = |->,  |b> = |->, note the sign flip w.r.t. normal densities
-            ! Condition below ensures no calc when no |a> with the required spin exists
-            if ((ns(ib) == -1) .and. (num_spin_dw(ix)>0)) then ! (*)
-
-               ! Auxiliary array 
-               wf_wf_prod%re = 2*wfa_rhoab(ns(ib))%re(:,iz)*wf_b
-               wf_wf_prod%im = 2*wfa_rhoab(ns(ib))%im(:,iz)*wf_b
-
+            if (ns(ib) == -1) then
                ! s-breve_0,rho
                dsresbr = dsresbr + wf_wf_prod%re
                dsimsbr = dsimsbr + wf_wf_prod%im
-                  
+               
                ! s-breve_0,phi
                dsresbp = dsresbp + wf_wf_prod%im
                dsimsbp = dsimsbp - wf_wf_prod%re
 
             ! |a> = |+>, |b> = |+>, note the sign flip w.r.t. normal densities
-            ! Condition below ensures no calc when no |a> with the required spin exists
-            else if ((ns(ib) == +1) .and. (num_spin_up(ix)>0)) then ! (*)
-
-               ! Auxiliary array
-               wf_wf_prod%re = 2*wfa_rhoab(ns(ib))%re(:,iz)*wf_b
-               wf_wf_prod%im = 2*wfa_rhoab(ns(ib))%im(:,iz)*wf_b
-
+            else if (ns(ib) == 1) then
                ! s-breve_0,rho
                dsresbr = dsresbr - wf_wf_prod%re
                dsimsbr = dsimsbr - wf_wf_prod%im
-                  
+               
                ! s-breve_0,phi
                dsresbp = dsresbp + wf_wf_prod%im
                dsimsbp = dsimsbp - wf_wf_prod%re
 
-            ! else
-            !    call abort(' Inconsistent spin in helpers.density')
+            else
+               call abort(' Inconsistent spin in helpers.density')
             end if
-            
-         end do ! iz, sp state in one block
-         !!$OMP END PARALLEL DO
-      end do ! ix, block index
+         
+      end do
+      !!$OMP END PARALLEL DO
 
       ! Strip off the integral weights
       ds%rerho(:) = dsrerho(:)*wdcori(:);    ds%imrho(:) = dsimrho(:)*wdcori(:)
@@ -719,7 +700,7 @@ contains
       ds%refr(:) = dsrefr(:)*wdcori(:);  ds%imfr(:) = dsimfr(:)*wdcori(:)
       ds%refp(:) = dsrefp(:)*wdcori(:);  ds%imfp(:) = dsimfp(:)*wdcori(:)
       ds%refz(:) = dsrefz(:)*wdcori(:);  ds%imfz(:) = dsimfz(:)*wdcori(:)
-      ds%regs(:) = dsregs(:)*wdcori(:);  ds%imgs(:) = dsimgs(:)*wdcori(:)
+      ds%regs(:) = dsregs(:)*wdcori(:);  ds%imgs(:) = dsimgs(:)*wdcori(:)      
 
       ! Pairing
       ds%rerb(:)  = dsrerb(:)*wdcori(:);   ds%imrb(:)  = dsimrb(:)*wdcori(:)
@@ -741,8 +722,7 @@ contains
       type(blockmatrix), intent(inout) :: reh, imh
       type(density_set), intent(in) :: ds
 
-      integer  :: ia, ib, ix, iy, iz, ixx, iyy, izz
-      real(dp) :: coeff
+      integer  :: ia, ib, ix, iy, iz
       
       type pointer_single
          real(dp), pointer :: p
@@ -761,36 +741,35 @@ contains
       type(pointer_single) :: wf_a_start(0:4)
       type(pointer_1d) :: wf_b_all(0:4) !, wf_a_all(0:4)
       type(field), save :: aux_fd
-      integer, parameter :: max_ind(0:4) = (/ 4, 3, 3, 3, 0 /) ! max index for each row / col of mf / hpsi
 
       ! Optimized tensor force calculation
       type(field), save :: ctj0_tjrr_tjpp_tjzz, ctj1_tjzr_minus_tjrz, ctj1_tjpz_minus_tjzp, ctj2_tjrz_tjzr, ctj2_tjpz_tjzp
 
-      ! reh%elem = 0; imh%elem = 0 ! Zeroing h is unnecessary 
+      ! Zero out matrix elements of mean field
+      reh%elem = 0; imh%elem = 0
 
       ! Allocate mean fields
-      if (.not. allocated(aux_fd%re)) then
-         call allocate_field(aux_fd, nghl)
-         call allocate_field(ctj0_tjrr_tjpp_tjzz, nghl)
-         call allocate_field(ctj1_tjzr_minus_tjrz, nghl)
-         call allocate_field(ctj1_tjpz_minus_tjzp, nghl)
-         call allocate_field(ctj2_tjrz_tjzr, nghl)
-         call allocate_field(ctj2_tjpz_tjzp, nghl)
-         do iy = -1, 1, 2 
-            do ix = -1, 1, 2
-               do ib = 0, 4
-                  do ia = 0, max_ind(ib)
-                     call allocate_field(mf(ia,ib,ix,iy),nghl)
-                  end do
+      call allocate_init_field(aux_fd, nghl)
+      call allocate_init_field(ctj0_tjrr_tjpp_tjzz, nghl)
+      call allocate_init_field(ctj1_tjzr_minus_tjrz, nghl)
+      call allocate_init_field(ctj1_tjpz_minus_tjzp, nghl)
+      call allocate_init_field(ctj2_tjrz_tjzr, nghl)
+      call allocate_init_field(ctj2_tjpz_tjzp, nghl)
+      do iy = -1, 1, 2 
+         do ix = -1, 1, 2
+            do ib = 0, 3
+               do ia = 0, 3
+                  call allocate_init_field(mf(ia,ib,ix,iy),nghl)
                end do
             end do
          end do
-         do ixx = -1, 1, 2
-            do iyy = 0, 4
-               call allocate_2darray(hpsi(iyy,ixx),nghl,maxval_db)
-            end do
+      end do
+      do iy = -1, 1, 2
+         do ix = -1, 1, 2
+            call allocate_init_field(mf(0,4,ix,iy),nghl)
+            call allocate_init_field(mf(4,0,ix,iy),nghl)
          end do
-      end if
+      end do
 
       ! Optimized tensor force calculation
       ctj0_tjrr_tjpp_tjzz%re = ctj0*(ds%retjrr(:)+ds%retjpp(:)+ds%retjzz(:))
@@ -1114,43 +1093,47 @@ contains
       call add_field(mf(2,2,-1,1), -1, aux_fd)
 
 
-      ! Loop over blocks
+      ! Loop over the blocks.
       ! Calculate e.g. h_ab = Sum_{sa,sb} Int{ Conjg[wf_a(x,sa)] [ f(x;sa,sb) ] wf_b(x,sb) }
 
+      do ix = -1, 1, 2
+         do iy = 0, 4
+            call allocate_init_2darray(hpsi(iy,ix),nghl,dqp)
+         end do
+      end do
+
+      ! Calculate [ f(x;sa,sb) ] * wf_b(x,sb)
+      !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ib,ix,iy,iz,wf_b_all)
+      do ib = 1, dqp
+         ! Column vector |b>
+         wf_b_all(0)%p => wf(:, ib)
+         wf_b_all(1)%p => wfdr(:, ib)
+         wf_b_all(2)%p => wfdp(:, ib) ! nl(ib)*y(:)*wf(:,ib)
+         wf_b_all(3)%p => wfdz(:, ib)
+         wf_b_all(4)%p => wfd2_all(:, ib)
+         
+         do ix = -1, 1, 2
+            do iy = 0, 4
+               do iz = 0, 4
+                  if (.not. allocated(mf(iy,iz,ix,ns(ib))%re)) cycle
+                  ! hpsi(iy,ix)%re(:,ib) = hpsi(iy,ix)%re(:,ib) + mf(iy,iz,ix,ns(ib))%re(:) * wf_b_all(iz)%p(:)
+                  call add_multiply(hpsi(iy,ix)%re(:,ib), mf(iy,iz,ix,ns(ib))%re(:), wf_b_all(iz)%p(:))
+
+                  ! hpsi(iy,ix)%im(:,ib) = hpsi(iy,ix)%im(:,ib) + mf(iy,iz,ix,ns(ib))%im(:) * wf_b_all(iz)%p(:)
+                  call add_multiply(hpsi(iy,ix)%im(:,ib), mf(iy,iz,ix,ns(ib))%im(:), wf_b_all(iz)%p(:))
+               end do
+            end do
+         end do
+      end do
+      !!$OMP END PARALLEL DO
+
+      ! Perform matrix-matrix multiplication to obtain reh and imh
+      ! Use OpenMP-enabled BLAS library to achieve best performance
       do ix = 1, nb
          iy = reh%ir2c(ix) ! column index of current block
          if (iy==0) cycle
-
-         ! Calculate [ f(x;sa,sb) ] * wf_b(x,sb)
-         !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ib,ixx,iyy,izz,wf_b_all,coeff)
-         do iz = 1, db(iy)
-            ! Column vector |b>
-            ib = isstart(iy)+iz-1
-            wf_b_all(0)%p => wf(:, ib)
-            wf_b_all(1)%p => wfdr(:, ib)
-            wf_b_all(2)%p => wfdp(:, ib) ! nl(ib)*y(:)*wf(:,ib)
-            wf_b_all(3)%p => wfdz(:, ib)
-            wf_b_all(4)%p => wfd2_all(:, ib)
-            
-            do ixx = -1, 1, 2
-               do iyy = 0, 4
-                  do izz = 0, max_ind(iyy)
-                     coeff = merge(1.0_dp,0.0_dp,izz>0) ! Equivalent to "(izz>0) ? 1.0 : 0.0;" in C
-                     ! hpsi(iyy,ixx)%re(:,iz) = hpsi(iyy,ixx)%re(:,iz) + mf(iyy,izz,ixx,ns(ib))%re(:) * wf_b_all(izz)%p(:)
-                     call add_mul_1d(mf(iyy,izz,ixx,ns(ib))%re(:), wf_b_all(izz)%p(:), &
-                                     coeff, hpsi(iyy,ixx)%re(:,iz))
-                     ! hpsi(iyy,ixx)%im(:,iz) = hpsi(iyy,ixx)%im(:,iz) + mf(iyy,izz,ixx,ns(ib))%im(:) * wf_b_all(izz)%p(:)
-                     call add_mul_1d(mf(iyy,izz,ixx,ns(ib))%im(:), wf_b_all(izz)%p(:), &
-                                     coeff, hpsi(iyy,ixx)%im(:,iz))
-                  end do
-               end do
-            end do
-         end do ! iz, sp state in one block
-         !!$OMP END PARALLEL DO
-         
-         ! Perform matrix-matrix multiplication to obtain reh and imh
-         ! Use OpenMP-enabled BLAS library to achieve best performance
          ia = isstart(ix)
+         ib = isstart(iy)
 
          ! wf_a has spin up
          if (num_spin_up(ix)>0) then
@@ -1160,31 +1143,28 @@ contains
             wf_a_start(3)%p => wfdz(1, ia)
             wf_a_start(4)%p => wfd2_all(1, ia)
             do iz = 0, 4
-               coeff = merge(1.0_dp,0.0_dp,iz>0) ! Equivalent to "(iz>0) ? 1.0 : 0.0;" in C
                call dgemm('T','N',num_spin_up(ix),db(iy),nghl,2.0_dp,wf_a_start(iz)%p,nghl,&
-                          hpsi(iz,1)%re(1,1),nghl,coeff,reh%elem(reh%ir2m(ix)),db(ix))
+                          hpsi(iz,1)%re(1,ib),nghl,1.0_dp,reh%elem(reh%ir2m(ix)),db(ix))
                call dgemm('T','N',num_spin_up(ix),db(iy),nghl,2.0_dp,wf_a_start(iz)%p,nghl,&
-                          hpsi(iz,1)%im(1,1),nghl,coeff,imh%elem(imh%ir2m(ix)),db(ix))
+                          hpsi(iz,1)%im(1,ib),nghl,1.0_dp,imh%elem(imh%ir2m(ix)),db(ix))
             end do
          end if
 
          ! wf_a has spin down
-         if (num_spin_dw(ix)>0) then
-            ia = ia + num_spin_up(ix)
-            wf_a_start(0)%p => wf(1, ia)
-            wf_a_start(1)%p => wfdr(1, ia)
-            wf_a_start(2)%p => wfdp(1, ia)
-            wf_a_start(3)%p => wfdz(1, ia)
-            wf_a_start(4)%p => wfd2_all(1, ia)
+         if (db(ix)-num_spin_up(ix)>0) then
+            wf_a_start(0)%p => wf(1, ia+num_spin_up(ix))
+            wf_a_start(1)%p => wfdr(1, ia+num_spin_up(ix))
+            wf_a_start(2)%p => wfdp(1, ia+num_spin_up(ix))
+            wf_a_start(3)%p => wfdz(1, ia+num_spin_up(ix))
+            wf_a_start(4)%p => wfd2_all(1, ia+num_spin_up(ix))
             do iz = 0, 4
-               coeff = merge(1.0_dp,0.0_dp,iz>0) ! Equivalent to "(iz>0) ? 1.0 : 0.0;" in C
-               call dgemm('T','N',num_spin_dw(ix),db(iy),nghl,2.0_dp,wf_a_start(iz)%p,nghl,&
-                          hpsi(iz,-1)%re(1,1),nghl,coeff,reh%elem(reh%ir2m(ix)+num_spin_up(ix)),db(ix))
-               call dgemm('T','N',num_spin_dw(ix),db(iy),nghl,2.0_dp,wf_a_start(iz)%p,nghl,&
-                          hpsi(iz,-1)%im(1,1),nghl,coeff,imh%elem(imh%ir2m(ix)+num_spin_up(ix)),db(ix))
+               call dgemm('T','N',db(ix)-num_spin_up(ix),db(iy),nghl,2.0_dp,wf_a_start(iz)%p,nghl,&
+                          hpsi(iz,-1)%re(1,ib),nghl,1.0_dp,reh%elem(reh%ir2m(ix)+num_spin_up(ix)),db(ix))
+               call dgemm('T','N',db(ix)-num_spin_up(ix),db(iy),nghl,2.0_dp,wf_a_start(iz)%p,nghl,&
+                          hpsi(iz,-1)%im(1,ib),nghl,1.0_dp,imh%elem(imh%ir2m(ix)+num_spin_up(ix)),db(ix))
             end do
          end if
-      end do ! ix, block index
+      end do
       
    end subroutine meanfield
 
@@ -1199,7 +1179,7 @@ contains
       type(density_set), intent(in) :: ds
       type(blockmatrix), intent(inout) :: red, imd
 
-      integer :: ia, ib, ix, iy, iz
+      integer :: ia, ib, ix, iy
 
       type(field), save :: aux_pp, aux_pm, aux_mp, aux_mm
 
@@ -1207,17 +1187,15 @@ contains
       ! index gives the spin of wf_a
       type(array_2d), save :: dpsi(-1:1)
 
-      if (.not. allocated(aux_pp%re)) then
-         call allocate_field(aux_pp, nghl)
-         call allocate_field(aux_pm, nghl)
-         call allocate_field(aux_mp, nghl)
-         call allocate_field(aux_mm, nghl)
-         do iz = -1, 1, 2
-            call allocate_2darray(dpsi(iz), nghl, maxval_db)
-         end do
-      end if
+      call allocate_init_field(aux_pp, nghl)
+      call allocate_init_field(aux_pm, nghl)
+      call allocate_init_field(aux_mp, nghl)
+      call allocate_init_field(aux_mm, nghl)
+      do ix = -1, 1, 2
+         call allocate_init_2darray(dpsi(ix), nghl, dqp)
+      end do
 
-      ! red%elem = 0 ; imd%elem = 0 ! Zeroing Delta is unnecessary 
+      red%elem = 0 ; imd%elem = 0
 
       ! Prepare pairing field
       aux_pp%re = cspair*(ds%resbr + ds%imsbp) ! |a> = |+>, |b> = |+>
@@ -1229,61 +1207,57 @@ contains
       aux_mm%re = cspair*(-ds%resbr + ds%imsbp) ! |a> = |->, |b> = |->
       aux_mm%im = cspair*(-ds%imsbr - ds%resbp) ! |a> = |->, |b> = |->
 
-      ! Loop over blocks
+      ! Apply pairing field onto wave functions
+      !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ib)
+      do ib = 1, dqp
+         if (ns(ib)==1) then
+            ! |a> = |+>, |b> = |+>
+            dpsi(1)%re(:, ib) = aux_pp%re(:)*wf(:, ib)
+            dpsi(1)%im(:, ib) = aux_pp%im(:)*wf(:, ib)
+
+            ! |a> = |->, |b> = |+>
+            dpsi(-1)%re(:, ib) = aux_mp%re(:)*wf(:, ib)
+            dpsi(-1)%im(:, ib) = aux_mp%im(:)*wf(:, ib)
+
+         else if (ns(ib)==-1) then
+            ! |a> = |+>, |b> = |->
+            dpsi(1)%re(:, ib) = aux_pm%re(:)*wf(:, ib)
+            dpsi(1)%im(:, ib) = aux_pm%im(:)*wf(:, ib)
+
+            ! |a> = |->, |b> = |->
+            dpsi(-1)%re(:, ib) = aux_mm%re(:)*wf(:, ib)
+            dpsi(-1)%im(:, ib) = aux_mm%im(:)*wf(:, ib)
+
+         else
+            call abort(' Inconsistent spin in helpers.pairingfield')
+         end if
+      end do
+      !!$OMP END PARALLEL DO
+
+      ! Perform matrix-matrix multiplication to obtain red and imd
+      ! Use OpenMP-enabled BLAS library to achieve best performance
       do ix = 1, nb
          iy = red%ir2c(ix) ! column index of current block
          if (iy==0) cycle
-
-         ! Apply pairing field onto wave functions
-         !!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ib)
-         do iz = 1, db(iy)
-            ! Coulomb vector |b>
-            ib = isstart(iy)+iz-1
-
-            if (ns(ib)==+1) then
-               ! |a> = |+>, |b> = |+>
-               dpsi(1)%re(:, iz) = aux_pp%re(:)*wf(:, ib)
-               dpsi(1)%im(:, iz) = aux_pp%im(:)*wf(:, ib)
-
-               ! |a> = |->, |b> = |+>
-               dpsi(-1)%re(:, iz) = aux_mp%re(:)*wf(:, ib)
-               dpsi(-1)%im(:, iz) = aux_mp%im(:)*wf(:, ib)
-
-            else if (ns(ib)==-1) then
-               ! |a> = |+>, |b> = |->
-               dpsi(1)%re(:, iz) = aux_pm%re(:)*wf(:, ib)
-               dpsi(1)%im(:, iz) = aux_pm%im(:)*wf(:, ib)
-
-               ! |a> = |->, |b> = |->
-               dpsi(-1)%re(:, iz) = aux_mm%re(:)*wf(:, ib)
-               dpsi(-1)%im(:, iz) = aux_mm%im(:)*wf(:, ib)
-
-            ! else
-            !    call abort(' Inconsistent spin in helpers.pairingfield')
-            end if
-         end do
-
-         ! Perform matrix-matrix multiplication to obtain red and imd
-         ! Use OpenMP-enabled BLAS library to achieve best performance
          ia = isstart(ix)
+         ib = isstart(iy)
 
          ! wf_a has spin up
          if (num_spin_up(ix)>0) then
             call dgemm('T','N',num_spin_up(ix),db(iy),nghl,2.0_dp,wf(1,ia),nghl,&
-                       dpsi(1)%re(1,1),nghl,0.0_dp,red%elem(red%ir2m(ix)),db(ix))
+                       dpsi(1)%re(1,ib),nghl,1.0_dp,red%elem(red%ir2m(ix)),db(ix))
             call dgemm('T','N',num_spin_up(ix),db(iy),nghl,2.0_dp,wf(1,ia),nghl,&
-                       dpsi(1)%im(1,1),nghl,0.0_dp,imd%elem(imd%ir2m(ix)),db(ix))
+                       dpsi(1)%im(1,ib),nghl,1.0_dp,imd%elem(imd%ir2m(ix)),db(ix))
          end if
 
          ! wf_a has spin down
-         if (num_spin_dw(ix)>0) then
-            ia = ia+num_spin_up(ix)
-            call dgemm('T','N',num_spin_dw(ix),db(iy),nghl,2.0_dp,wf(1,ia),nghl,&
-                       dpsi(-1)%re(1,1),nghl,0.0_dp,red%elem(red%ir2m(ix)+num_spin_up(ix)),db(ix))
-            call dgemm('T','N',num_spin_dw(ix),db(iy),nghl,2.0_dp,wf(1,ia),nghl,&
-                       dpsi(-1)%im(1,1),nghl,0.0_dp,imd%elem(imd%ir2m(ix)+num_spin_up(ix)),db(ix))
+         if (db(ix)-num_spin_up(ix)>0) then
+            call dgemm('T','N',db(ix)-num_spin_up(ix),db(iy),nghl,2.0_dp,wf(1,ia+num_spin_up(ix)),nghl,&
+                       dpsi(-1)%re(1,ib),nghl,1.0_dp,red%elem(red%ir2m(ix)+num_spin_up(ix)),db(ix))
+            call dgemm('T','N',db(ix)-num_spin_up(ix),db(iy),nghl,2.0_dp,wf(1,ia+num_spin_up(ix)),nghl,&
+                       dpsi(-1)%im(1,ib),nghl,1.0_dp,imd%elem(imd%ir2m(ix)+num_spin_up(ix)),db(ix))
          end if
-      end do ! ix, block index
+      end do
 
    end subroutine pairingfield
 

@@ -335,12 +335,12 @@ def pynfam_mpi_init(pynfam_inputs, nr_calcs, comm, check):
 
 
     # Split into master/worker groups
-    if comm_size > 1 and rerun == 2:
-        stdout = False
-        newcomm = comm
-        group = 0
+    #if comm_size > 1 and rerun == 2:
+    #    stdout = False
+    #    newcomm = comm
+    #    group = 0
 
-    elif comm_size > 1:
+    if comm_size > 1:
         stdout = False
 
         if rank in range(1,nr_masters+1):
@@ -490,6 +490,8 @@ def get_fam_ops(key, beta_type):
         * 'All'       : n=14, all operators
         * 'Allowed'   : n= 3, [F,GT]
         * 'Forbidden' : n=11, [R,P,RS0,RS1,RS2,PS0]
+        * 'GAMOWTELLER':n= 2, [GT]
+        * 'SPINDIPOLE': n= 9, [RS0,RS1,RS2]
         * '0+'        : n= 1, [F]
         * '1+'        : n= 2, [GT]
         * '0-'        : n= 2, [RS0,PS0]
@@ -522,15 +524,19 @@ def get_fam_ops(key, beta_type):
             u'FORBIDDEN': ([0,1,2], [-1]),
             u'0+'       : ([0]    , [+1]),
             u'GAMOWTELLER':([1]   , [+1]),
+            u'SPINDIPOLE':([0,1,2], [-1]),
             u'1+'       : ([1]    , [+1]),
             u'0-'       : ([0]    , [-1]),
             u'1-'       : ([1]    , [-1]),
             u'2-'       : ([2]    , [-1])
             }
+    # Some keys can only use part of ops in the given (J's, pi's)
+    op_constrain = {u'SPINDIPOLE': {'RS0','RS1','RS2'}}
 
     if beta_type == u'c':
         beta_type = u'+'
 
+    kval=None
     if isinstance(key, tuple):
         if not key:
             return []
@@ -558,13 +564,15 @@ def get_fam_ops(key, beta_type):
         if key in [None, u'NONE', u'']:
             return []
 
+        def kval_range(j, kval): return range(0,j+1) if kval is None else ((kval,) if j >= kval else ())
+        def op_check(op, key): return (op in op_constrain[key]) if key in op_constrain else True
         try:
-            active_ops = [{u'name' : u'{:}{:}K{:1d}'.format(op,beta_type,kval),
-                           u'genop': u'{:}_K{:1d}'.format(op,kval),
-                           u'k'    : kval,
+            active_ops = [{u'name' : u'{:}{:}K{:1d}'.format(op,beta_type,k),
+                           u'genop': u'{:}_K{:1d}'.format(op,k),
+                           u'k'    : k,
                            u'op'   : u'{:}{:}'.format(op,beta_type)} \
-                for op, (j,p) in list(fam_ops.items()) for kval in range(0,j+1)\
-                    if j in keys[key][0] and p in keys[key][1]]
+                for op, (j,p) in list(fam_ops.items()) for k in kval_range(j,kval)\
+                    if j in keys[key][0] and p in keys[key][1] and op_check(op,key)]
         except KeyError:
             raise ValueError(u"Invalid FAM operator key. Options: '{:}', or (Operator, K).".format(\
                     u"', '".join(list(keys.keys()))))

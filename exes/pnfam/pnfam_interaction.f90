@@ -90,7 +90,7 @@ contains
    subroutine init_interaction
       use pnfam_constants,    only : translate_uppercase
       use hfb_solution, only : nghl, hfb_cpair, hfb_alpha_pair, hfb_density_coord,&
-                               rho_c=>rho_nm
+                               rho_c
       implicit none
 
       real(dp), dimension(:), allocatable :: rho
@@ -266,7 +266,7 @@ contains
    !---------------------------------------------------------------------------
    subroutine load_ph_interaction(skyrme_uses_j2_terms, ext_interaction)
       use pnfam_constants, only : translate_uppercase
-      use hfb_solution, only : rho_c=>rho_nm, hbzero
+      use hfb_solution, only : rho_nm, hbzero
       implicit none
       
       logical, intent(inout) :: skyrme_uses_j2_terms, ext_interaction
@@ -750,7 +750,7 @@ contains
          
          ! m*/m is a simple function of t's and x's
          ! N.b. - using hb0 = 20.735530 until that variable is passed in HFB solution
-         effmass = (1+1/16.0_dp/hbzero*rho_c*(3*t1+t2*(5+4*x2)))**(-1)
+         effmass = (1+1/16.0_dp/hbzero*rho_nm*(3*t1+t2*(5+4*x2)))**(-1)
          return
       end if
    end subroutine load_ph_interaction
@@ -868,7 +868,7 @@ contains
    subroutine check_self_consistency(tolerance, lprin, ierr)
       use hfb_solution, only: hfb_cr0, hfb_crr, hfb_cdrho, hfb_ctau, hfb_ctj,       &
                               hfb_crdj, hfb_use_j2terms, hfb_cpair, hfb_alpha_pair, &
-                              rho_c=>rho_nm
+                              rho_c
 
       implicit none
 
@@ -986,6 +986,7 @@ contains
    ! Primary display of the coupling constants for STDOUT.
    !---------------------------------------------------------------------------
    subroutine print_interaction_params
+      use hfb_solution, only : rho_c
       implicit none
       
       ! constants and auxiliary variables for converting to natural units
