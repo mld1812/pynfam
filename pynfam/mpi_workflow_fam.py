@@ -91,6 +91,49 @@ def initialize_fam_2bc(comm, mgr, fam_ops, setts, rerun, stdout, nshells):
 
     return err_run
     """
+
+def initialize_fam_2bc_all(comm, mgr_list, fam_ops_list, setts_list, stdout):
+    #initialize_fam_2bc with multiple nuclei. similar parameters as initialize_fam_2bc except lists for mgr, fam_ops, setts are passed.
+    num_calcs = len(mgr_list)
+    GT_Ks_requested = []
+    for i in range(num_calcs):
+        nml_params = setts_list[i][u'fam']
+        tbc_mode = nml_params.get(u'two_body_current_mode', 0)
+        if not tbc_mode:
+            continue
+        else:
+            tbc_mode = int(str(tbc_mode)[1]) # 2nd digit = 1 needs .tbc
+            if tbc_mode != 1:
+                continue
+        err = []
+        #2/5/24 Search for GT, 0/GT, 1 in fam_ops. If both are present then run in parallel using runtasks_master
+        for d in fam_ops_list[i]:
+            if d[u'op'][:2] == 'GT':
+                #create pnfamRun object with settings and add to list.
+                fam_rep = pnfamRun(mgr_list[i].paths, d[u'op'], d[u'k'])
+                fam_rep.label = mgr_list[i].paths.hfb
+                if nml_params is not None:
+                    fam_rep.setNmlParam(nml_params)
+                fam_rep.setCtrPoint(1+1j) # Dummy energy
+                #check if the file exists.
+                tbc_input = os.path.join(mgr_list[i].paths.hfb, u'{:}.tbc'.format(fam_rep.opname))
+                if not os.path.exists(tbc_input):
+                    GT_Ks_requested.append(fam_rep)
+    if len(GT_Ks_requested) > 1:
+        #call runtasks_master
+        finished_tasks, err_run, err_msg = runtasks_master(GT_Ks_requested, comm, stdout)
+        if err_run:   
+            msg = [f"Error encountered initializing 2BC:{err_msg}"]
+            pynfam_warn(msg, mgr_list[0].paths.calclabel, err_run)
+    elif len(GT_Ks_requested) == 1:
+        #run the singular object.
+        err_msg = fam_rep.runExe(stdout)
+        if err_msg is not None:
+            msg = [f"Error encountered initializing 2BC:{err_msg}"]
+            pynfam_warn(msg, mgr_list[0].paths.calclabel, True)
+    return False #no error
+    
+
 #-------------------------------------------------------------------------------
 def initialize_fam_contour(mgr, setts, ctr_type, beta_type, hfb_gs):
 

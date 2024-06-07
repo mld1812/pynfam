@@ -1234,6 +1234,12 @@ class shapeFactor(phaseSpace):
                 factor = 1.0 if k == 0 else 2.0
                 if item in genops:
                     total_SD += factor * np.imag(self.strengths[item].cstr_df[u'Strength'].values)
+                elif k != 0:
+                    item_k0 = u'RS'+str(j)+'_K0'
+                    if item_k0 in genops: #add in the K=1/2 version if it doesn't exist and K=0 version exists. This is in case of spherical
+                        #nuclei where only K=0 is calculated.
+                        total_SD += factor * np.imag(self.strengths[item_k0].cstr_df[u'Strength'].values)
+
 
         if zero_neg_str:
             total_SD.clip(min=0)

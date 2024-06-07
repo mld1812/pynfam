@@ -4,7 +4,7 @@ from pynfam import pynfam_mpi_calc
 
 pynfam_inputs = {
  'directories': {
-     'outputs' : 'Gd162_all2bc_DME',
+     'outputs' : 'SD_test_updated2_fixed',
      'exes'    : './exes',
      'scratch' : './tests'
      },
@@ -14,37 +14,62 @@ pynfam_inputs = {
  'rerun_mode': 0,
 
  'hfb_mode': {
-     'gs_def_scan'    :  (0, ()), #(-2, (-0.2, 0, 0.2)), #(0, ()), #+1, (0.14,)
+     'gs_def_scan'    :  (-2, (0.0,)), #(-2, (-0.2, 0, 0.2)), #(0, ()), #+1, (0.14,)
      'dripline_mode'  : 0,
-     'ignore_nonconv' : 2
+     'ignore_nonconv' : 2,
+     'retry_nonconv': True,
      },
 
  'fam_mode': {
-     'fam_contour': 'CIRCLE',
+     'fam_contour': 'CONSTR',
      'beta_type'  : '-',
-     'fam_ops'    : 'Forbidden' #('P', 0)
+     'fam_ops'    : ('SPINDIPOLE', 0) #('P', 0)
      }
 }
 
 override_settings = {
- 'hfb' : {'proton_number'    : 64, #64, 98 - Gd162
-          'neutron_number'   : 98,
-          'number_of_shells' : 6, 
-          'number_gauss'     : 40,
-          'number_laguerre'  : 40,
-          'number_legendre'  : 80,
-          #'functional'       : 'SKM*',
+ 'hfb' : {'proton_number'    : 40, #64, 98 - Gd162
+          'neutron_number'   : 50,
+          'number_of_shells' : 16, 
+          #'number_gauss'     : 20,
+          #'number_laguerre'  : 20,
+          #'number_legendre'  : 40,
+          'functional'       : 'SKOP',
+          'pairing_cutoff': 60.0,
+          'pairing_feature': 0.5,
+          "vpair_n": 0.0,
+     	"vpair_p": 0.0,
+     	"number_iterations": 600,
+     	"accuracy": 1e-08,
           #'force_parity'     : False
           },
 
  'ctr' : {
-	    #'energy_min': 2.4,
-	    #'energy_max': 22.4,
-	    #'half_width': 0.2, #0.5
+	    'energy_min': 5.287984000000005,
+	    'energy_max': 39.287984,
+	    'half_width': 0.5, #0.5
+	    'de_hw_ratio': 0.8
 	    #'nr_points' : 2
 	   },
 
- 'fam' : {# 'interaction_name' : 'SKM*',
+ 'fam' : {
+ 	 'use_fam_storage': 0,
+ 	 'interaction_name' : 'SKOP',
+ 	 'force_j2_terms': False,
+ 	 'convergence_epsilon': 1e-07,
+ 	 'require_self_consistency': True,
+ 	 'require_gauge_invariance': False,
+ 	 'vpair_t0': -264.216261162,
+ 	 'vpair_t1': None,
+ 	 'override_cs0': 137.00212941970156,
+ 	 'override_csr': 0.0,
+ 	 'override_cds': 0.0,
+ 	 'override_ct' : 0.0,
+ 	 'override_cgs' : 0.0,
+ 	 'override_cf': 0.0,
+ 	 'max_iter': 300,
+ 	 'broyden_history_size': 200
+ 
           #'vpair_t0'         : 0.0,
           #'convergence_epsilon' : 1e-2,
          # 'max_iter'         : 2,
@@ -56,7 +81,7 @@ override_settings = {
           #'override_cgs'        : '',
           #'override_cf'         : '',
  
- 	 'two_body_current_mode': 141111, #digit 4: GT, digit 5: P, digit 6: PS0; 1 = 2bc, 2 = DME for P/PS0. 2nd digit controls GT: use 1 for full pnfam, 4 for DME
+ 	 #'two_body_current_mode': 111020, #digit 4: GT, digit 5: P, digit 6: PS0; 1 = 2bc, 2 = DME for P/PS0. 2nd digit controls GT: use 1 for full pnfam, 4 for DME
 		
  	  #'max_iter' : 2
           #'two_body_current_usep': False,
@@ -66,6 +91,7 @@ override_settings = {
  'psi' : {
  	#"GA": -1.0
  }
+
 }
 
 
