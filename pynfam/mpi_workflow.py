@@ -109,6 +109,72 @@ def pynfam_mpi_calc(pynfam_inputs, override_settings, check=False):
     if rank==0: wu.pynfam_finalize(pynfam_inputs)
 
 
+def pynfam_mpi_calc_tbc(pynfam_inputs, override_settings, check=False):
+    """
+    Handle the MPI when just trying to calculate the tbc files only. Scratch folder and hfb should be already computed. Rank 1 = master, rank 0 = lead worker, all others are workers
+    """
+
+    # Setup MPI variables
+    if do_mpi:
+        comm = mu.MPI.COMM_WORLD
+    else:
+        comm = 0
+    rank, comm_size = mu.pynfam_mpi_traits(comm)
+
+    # User input values valid? (All processes must run this b/c we format some inputs)
+    inp_err_i = wu.pynfam_input_check(pynfam_inputs)
+    inp_err_o = wu.pynfam_override_check(pynfam_inputs, override_settings)
+    inp_err = inp_err_i + inp_err_o
+    if rank == 0:
+        if inp_err: mu.pynfam_abort(comm, inp_err)
+
+    # Inputs compatible with requested mode? If so retrieve some run parameters.
+    inp_err, inp_wrn, nr_calcs, do_fam, exst_data = wu.pynfam_init(pynfam_inputs, override_settings)
+    if rank == 0:
+        if inp_err: mu.pynfam_abort(comm, inp_err)
+
+    # Setup MPI related parameters, split comm into master/worker.
+    inp_err, mpi_wrn, newcomm, group, stdout = wu.pynfam_mpi_init_2bconly(pynfam_inputs, nr_calcs, comm, check)
+    if rank == 0:
+        if inp_err and not check: mu.pynfam_abort(comm, inp_err)
+        if mpi_wrn: mu.pynfam_warn(mpi_wrn)
+
+    #Get a list of all mgrs, fam_ops, setts to pass into an expanded initialize_fam_2bc function.
+    if group == 0: #only one master.
+        dirs = pynfam_inputs[u'directories']
+        mgr_list = []
+        fam_ops_list = []
+        setts_list = []
+        for index in range(nr_calcs):
+            #not going to worry about dripline.
+            beta_type   = pynfam_inputs[u'fam_mode']['beta_type']
+            if isinstance(beta_type, list):
+                beta_type = beta_type[index]
+            fam_ops_in  = pynfam_inputs[u'fam_mode']['fam_ops']
+            if isinstance(fam_ops_in, list):
+                fam_ops_in = fam_ops_in[index]
+
+            fam_ops = wu.get_fam_ops(fam_ops_in, beta_type)
+            #only care about the GT, so filter. 
+            fam_ops = [x for x in fam_ops if x['op'][0:2] == 'GT']
+            setts = wu.pynfam_settings(override_settings, index)
+
+            # Unique run label
+            calclabel = str(index).zfill(6)
+            # Paths (requires a calclabel, otherwise not fully defined) and manager
+            all_paths = pynfamPaths(calclabel, dirs[u'outputs'], dirs[u'exes'], dirs[u'scratch'])
+            mgr = pynfamManager(all_paths)
+            mgr_list.append(mgr)
+            fam_ops_list.append(fam_ops)
+            setts_list.append(setts)
+        #run initialize fam 2bc.
+        initialize_fam_2bc_all(comm, mgr_list, fam_ops_list, setts_list, stdout)
+        if do_mpi: mu.runtasks_killsignal(comm, newcomm) # Barrier
+    # All else are workers. They don't know anything, just run tasks
+    else:
+        mu.runtasks_worker(comm, newcomm, stdout)
+    if do_mpi: comm.Barrier()
+
 # ------------------------------------------------------------------------------
 def pynfam_dripline_calc(pynfam_inputs, **kwargs):
     r"""

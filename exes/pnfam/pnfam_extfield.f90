@@ -621,7 +621,6 @@ contains
       i5 = get_digit(use_2bc, 1) ! if >0, then 2bc P current is active
       i6 = get_digit(use_2bc, 0) ! if >0, then 2bc PS0 current is active
 
-      !12/3/23: Add new setting for i3: 4 = P-only (no Gamow-Teller)
       op%use_2bc(1) = i1
       op%use_2bc(2) = i2
       op%use_2bc(3) = i3
@@ -629,7 +628,7 @@ contains
       op%use_2bc(5) = i5
       op%use_2bc(6) = i6
       ! Check valid digits
-      if ((i1 < 1 .or. i1 > 2) .or. (i2 < 1 .or. i2 > 5) .or. (i3 < 1 .or. i3 > 4)) then
+      if ((i1 < 1 .or. i1 > 2) .or. (i2 < 1 .or. i2 > 5) .or. (i3 < 1 .or. i3 > 3)) then
          ierr = 1
       ! Check valid combos: NM+LDA (i1=2,3) has only Gamma (i3=1) ... and DME?
       else if (i1 /= 1 .and. i3 /= 1) then
@@ -1235,10 +1234,10 @@ contains
       !+ 1.0_dp / (8.0_dp * P**3) * ((-kf*kf*(kf*kf + 4.0_dp*m*m - 2.0_dp*P*P) &
       !- (3.0_dp*m**4 + 4.0_dp*m*m*P*P + P**4)) * log((m*m + (P + kf)**2)/(m*m + (P - kf)**2)) + 4.0_dp*kf*P*(kf*kf+3.0_dp*m*m+P*P) )
 
-      !simplified version.
+      !simplified version - see Backup docs for combining 2I_2 + 1/2 I.
       iout = 1.0_dp / (P**3) * (P*M*M*kf - 0.25_dp*M*M*(M*M+P*P+kf*kf)*log((m*m + (P + kf)**2)/(m*m + (P - kf)**2)))
       !iout = forbidden_2bc_P(kf, P) 
-      rf = -gA*gA*hbarc*Mn/ (4*pi*pi*Fpi*Fpi) * iout !Full correction is gA^2 / (4pi^2 Fpi^2).
+      rf = gA*gA*hbarc*Mn/ (4*pi*pi*Fpi*Fpi) * iout !Full correction is gA^2 / (4pi^2 Fpi^2).
       !Multiply out 1/correction factor: -Mn / hbarc.Since we would multiply by two factors of hbarc for the Fpi^2 in denominator, 
       !we end up with Mn * hbarc in numerator. don't need to worry about factoring out a gA since the original P operator has no gA.
       !write(st,'(a13,f16.3,a13, f16.3,a21)') 'max of rf  : ', MAXVAL(rf), 'min of rf  : ', MINVAL(rf), 'in forbidden 2bc exc.'
@@ -1429,9 +1428,9 @@ contains
       real(dp) :: m, c1, c2
       integer :: loopvar
       m = Mpi / hbarc
-      u24 = 1.0_dp / (24.0_dp *kf*kf*kf*kf) * (kf*kf*(80.0_dp*kf**4 + 40.0_dp*kf*kf*m*m - 3.0_dp*m**4)/(4.0_dp*kf*kf+m*m)**3 + 0.75_dp*log(1.0_dp+4.0_dp*kf*kf/(m*m)))
-      c1 = 35.0_dp / (12.0_dp * m**4)
-      c2 = -28.0_dp / (m**6) !Taylor expansion of U_2^4 / kf**4: c1 + c2 kf^2.
+      u24 = 1.0_dp / (6.0_dp *kf*kf*kf*kf) * (kf*kf*(80.0_dp*kf**4 + 40.0_dp*kf*kf*m*m - 3.0_dp*m**4)/(4.0_dp*kf*kf+m*m)**3 + 0.75_dp*log(1.0_dp+4.0_dp*kf*kf/(m*m)))
+      c1 = 35.0_dp / (3.0_dp * m**4)
+      c2 = -112.0_dp / (m**6) !Taylor expansion of U_2^4 / kf**4: c1 + c2 kf^2.
       do loopvar=1,nghl  
          if (kf(loopvar) < 0.001) then !reasonable cutoff.
             u24(loopvar) = c1 + c2*kf(loopvar)**2 !use Taylor series approximation
@@ -1500,11 +1499,11 @@ contains
       !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u10 + 0.1_dp*u12)*rho + u22 - u24*kf/(60.0_dp*pi*pi))
       !rf =  (0.25_dp*d2r0 - tau0)
       
-      !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u10 + 0.1_dp*u12)*rho + u22 - u24*kf/(60.0_dp*pi*pi)&
-      !+ (u12_kf2/6.0_dp - u24_kf4) * (0.25_dp*d2r0 - tau0))
+      rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u10 + 0.1_dp*u12)*rho + u22 - u24*kf/(15.0_dp*pi*pi)&
+      + (u12_kf2/6.0_dp - u24_kf4) * (0.25_dp*d2r0 - tau0))
 
       !constant density case: only u10, u22 terms survive, other terms cancel.
-      rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * (u10*rho + u22)
+      !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * (u10*rho + u22)
       !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ((u10 + 0.1_dp*u12)*rho + u22 - u24*kf/(60.0_dp*pi*pi))
       !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ((u10 + 0.1_dp*u12)*rho - kf * u24/(60.0_dp*pi*pi) + u22)
       !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ((u12_kf2/6.0_dp - u24_kf4))

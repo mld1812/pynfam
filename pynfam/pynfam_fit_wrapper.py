@@ -2,7 +2,7 @@ r"""
     Author: Tong Li, Mich State Univ, 2020-
 """
 
-from pynfam import pynfam_mpi_calc
+from pynfam import pynfam_mpi_calc, pynfam_mpi_calc_tbc
 # from pynfam.utilities.mpi_utils import do_mpi
 from pynfam.utilities import mpi_utils as mu
 import os
@@ -566,6 +566,29 @@ def detaildf_process_GTSD(output_df, category, label, column_name, converter, Z,
         k = int(op_name[-1])
         strength_arr =  output_df['S('+op_name+')'].to_numpy()
         strength_list.append((k, strength_arr))
+
+    # 5/27/24: Also include the effect of RS1-K1, RS2-K1/2 if those are not computed for spherical nuclei for SD strengths
+    if category == 'SD':
+        K_12_files = ['RS1-K1.out', 'RS2-K1.out', 'RS2-K2.out']
+        #check if RS1-K1, RS2-K0/1 are found in os.listdir(detail_dir_path)
+        for detail_file in sorted(fnmatch.filter(os.listdir(detail_dir_path), detail_fnmatch)):
+            detail_path = os.path.join(detail_dir_path, detail_file)
+            if not os.path.isfile(detail_path): continue
+            if detail_file in K_12_files:
+                K_12_files.remove(detail_file)
+        if len(K_12_files) > 0: #some missing
+            for missing_K in K_12_files:
+                rsL = missing_K[2] #get the L from rsL
+                kval = missing_K[5] #get the K from rsL-kK
+                #load RSL-K0.out and add to strength_list with k=kval.
+                detail_df = pd.read_csv(f'RS{rsL}-K0.out', delim_whitespace=True, header=0, comment=u'#', index_col=0)
+                op_name = f'RS{rsL}_K{kval}'
+                output_df['S('+op_name+')'] = detail_df['Re(Strength)'] + 1j*detail_df['Im(Strength)']
+                output_df['Conv('+op_name+')'] = (detail_df['Conv'] == 'Yes')
+                strength_arr = output_df['S('+op_name+')'].to_numpy()
+                strength_list.append((int(kval), strength_arr))
+
+
 
     # Use a rational interpolator for complex strengths to find a better peak.
     # If use_ratinterp>1, numerical error caused by FAM convergence epsilon will also be computed.
@@ -1788,13 +1811,29 @@ class pynfam_residual(object):
         else:
             return df
 
-def pynfam_fit_wrapper_HFBonly(
+def pynfam_fit_wrapper_nonroot_tbc(comm, root_rank):
+    # Work function for non-root processes for tbc.
+    assert(mu.do_mpi)
+    val = None
+    while True:
+        val = comm.bcast(val, root=root_rank) # receive parameters from root
+        if isinstance(val, tuple):
+            # run pynfam
+            pynfam_mpi_calc_tbc(*val)
+        else:
+            # return what's broadcasted
+            return val
+
+def pynfam_fit_wrapper_HFB_or_tbc_only(
         input_data, categories=None, override_setts_fit={}, override_setts_cat={}, return_df=True, clean_files=False,
         exes_dir='./exes', scratch_dir='./scratch', backup_dir='./backup', backup_option=-1, backup_max=-1, start_from_backup=-1,
         nr_parallel_calcs=None, nthreads_per_calc=None, rerun_mode=None, ignore_hfb_nonconv=2, hfb_only=False, use_ratinterp=1,
-        assert_consistency=False, comm=None, check=False, **kwargs):
-    # This is the function open to outside for fitting
-                   
+        assert_consistency=False, comm=None, check=False, calc_tbc=False, **kwargs):
+    # This is the function open to outside for calculating HFB or tbc only. This is useful when using the full Gamow-Teller
+    # two body current, since it requires OpenMP multithreading and only needs to be computed once, at the start of the calculation.
+    # The FAM calculations, which are repeated every iteration, run much faster without multithreading. Therefore they should be separate calculations.
+    # If calculating hfb (calc_tbc=False), then it will build the scratch directory and run all hfb calcs. If calculating tbc, the hfb files must already exist.
+
     # Setup MPI variables
     if mu.do_mpi:
         if comm is None: # no MPI communicator input from outside wrapper
@@ -1846,27 +1885,28 @@ def pynfam_fit_wrapper_HFBonly(
     
     # main work
     if rank == 0:
-        result = pynfam_fit_wrapper_root_HFBonly(input_data, categories, override_setts_fit, override_setts_cat, return_df, clean_files, \
+        result = pynfam_fit_wrapper_root_hfb_or_tbc(input_data, categories, override_setts_fit, override_setts_cat, return_df, clean_files, \
                                          exes_dir, scratch_dir, backup_dir, backup_option, backup_max, start_from_backup, \
                                          nr_parallel_calcs, nthreads_per_calc, rerun_mode, ignore_hfb_nonconv, hfb_only, use_ratinterp, \
-                                         comm, rank, check, result_filename, \
+                                         comm, rank, check, result_filename, calc_tbc=calc_tbc, \
                                          **kwargs)
         printf('One run of pynfam_fit_wrapper finishes at', datetime.datetime.now())
         #send kill signal.
         comm.bcast(True, 0)
     else:
-        result = pynfam_fit_wrapper_nonroot(comm, 0)
+        if calc_tbc: #call the tbc nonroot function.
+            result = pynfam_fit_wrapper_nonroot_tbc(comm, 0)
+        else: #call the regular nonroot function when calculating hfb.
+            result = pynfam_fit_wrapper_nonroot(comm, 0)
     return result
 
-
-def pynfam_fit_wrapper_root_HFBonly(input_data, categories, override_setts_fit, override_setts_cat, return_df, clean_files,
+def pynfam_fit_wrapper_root_hfb_or_tbc(input_data, categories, override_setts_fit, override_setts_cat, return_df, clean_files,
                             exes_dir, scratch_dir, backup_dir, backup_option, backup_max, start_from_backup,
                             nr_parallel_calcs, nthreads_per_calc, rerun_mode, ignore_hfb_nonconv, hfb_only, use_ratinterp,
-                            comm, rank, check, result_filename, **kwargs):
+                            comm, rank, check, result_filename, calc_tbc=False, **kwargs):
     # Work function for root process
-    # This is the first part of the pynfam_fit_wrapper_root function up to hfb calcs. This is useful
-    # with the GT 2bc since those require multithreading, but the FAM calcs are slower with multithreading.
-
+    # This will calculate the hfb or tbc files. When calculating the tbc files, the scratch folder and hfb files must already exist.
+    # When calculating hfb, it will run the pynfam_fit_wrapper_root up to the hfb part. 
     # check / read input_data
     if isinstance(input_data, str):
         input_data = pd.read_csv(input_data, header=0, comment='#')
@@ -1917,15 +1957,7 @@ def pynfam_fit_wrapper_root_HFBonly(input_data, categories, override_setts_fit, 
     if not os.path.isdir(scratch_dir_path):
         os.makedirs(scratch_dir_path)
 
-    # prepare backup dir and get backup files if we need
-    if backup_option or start_from_backup >= 0:
-        backup_dir_path = os.path.realpath(backup_dir)
-        if not os.path.isdir(backup_dir_path):
-            os.makedirs(backup_dir_path)
-        if start_from_backup >= 0:
-            if not scratch_from_backup(os.path.join(backup_dir_path, str(start_from_backup)), scratch_dir_path, categories):
-                start_from_backup = -1
-    
+    #shouldn't need to worry about backup
     # main work starts
     support_categories = {'GT', 'SD', 'HL', 'GAP'}
     category_set = set(categories) & set(all_categories_pure) & support_categories
@@ -2013,6 +2045,13 @@ def pynfam_fit_wrapper_root_HFBonly(input_data, categories, override_setts_fit, 
         # neutron / proton numbers
         override_settings['hfb']['proton_number'] = tuple(data['Z'])
         override_settings['hfb']['neutron_number'] = tuple(data['N'])
+        #If calc_tbc = False, then two body current mode should not be set. Otherwise, if calc_tbc = True, it should be set to 111100 (GT on).
+        if calc_tbc:
+            if 'two_body_current_mode' not in override_settings['fam']:
+                override_settings['fam']['two_body_current_mode'] = 111100
+        else:
+            if 'two_body_current_mode' in override_settings['fam']:
+                del override_settings['fam']['two_body_current_mode']
         # deformation info given in input dataframe
         if 'deformation' in data.columns:
             hfb_gs_def_scan = []
@@ -2089,15 +2128,26 @@ def pynfam_fit_wrapper_root_HFBonly(input_data, categories, override_setts_fit, 
         if rerun in {0,1,'FAM'}:
             all_hfb_OK, functional_info, lambda_n, lambda_p, pair_gap_n, pair_gap_p = read_hfb(dir_path, len(data))
 
-        # run pynfam, hfb only
-        if rerun != 1 and (not all_hfb_OK):
-            # when rerun==1 or hfb info is extracted successfully, no HFB calc will be performed
-            if mu.do_mpi:
-                pynfam_inputs, override_settings, check = comm.bcast((pynfam_inputs, override_settings, check), root=rank)
-            printf('Call of pynfam_mpi_calc (HFB part) for', category, 'starts at', datetime.datetime.now())
-            pynfam_mpi_calc(pynfam_inputs, override_settings, check)
-            printf('Call of pynfam_mpi_calc (HFB part) for', category, 'finishes at', datetime.datetime.now())
-            # read info from hfb calcs (again)
-            all_hfb_OK, functional_info, lambda_n, lambda_p, pair_gap_n, pair_gap_p = read_hfb(dir_path, len(data))
+        if not calc_tbc:
+            # run pynfam, hfb only
+            if rerun != 1 and (not all_hfb_OK):
+                # when rerun==1 or hfb info is extracted successfully, no HFB calc will be performed
+                if mu.do_mpi:
+                    pynfam_inputs, override_settings, check = comm.bcast((pynfam_inputs, override_settings, check), root=rank)
+                printf('Call of pynfam_mpi_calc (HFB part) for', category, 'starts at', datetime.datetime.now())
+                pynfam_mpi_calc(pynfam_inputs, override_settings, check)
+                printf('Call of pynfam_mpi_calc (HFB part) for', category, 'finishes at', datetime.datetime.now())
+                # read info from hfb calcs (again)
+                all_hfb_OK, functional_info, lambda_n, lambda_p, pair_gap_n, pair_gap_p = read_hfb(dir_path, len(data))
+            else:
+                printf("Call of pynfam_mpi_calc (HFB part) is skipped for", category)
+
         else:
-            printf("Call of pynfam_mpi_calc (HFB part) is skipped for", category)
+            if not all_hfb_OK: #then something's wrong with the HFB files?
+                printf("Error: HFB files are not already calculated/correct.")
+            else:
+                if mu.do_mpi:
+                    pynfam_inputs, override_settings, check = comm.bcast((pynfam_inputs, override_settings, check), root=rank)
+                printf('Call of pynfam_mpi_calc (tbc part) for', category, 'starts at', datetime.datetime.now())
+                pynfam_mpi_calc_tbc(pynfam_inputs, override_settings, check)
+                printf('Call of pynfam_mpi_calc (tbc part) for', category, 'finishes at', datetime.datetime.now())

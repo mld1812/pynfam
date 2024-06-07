@@ -340,6 +340,65 @@ def pynfam_mpi_init(pynfam_inputs, nr_calcs, comm, check):
     #    newcomm = comm
     #    group = 0
 
+    elif comm_size > 1:
+        stdout = False
+
+        if rank in range(1,nr_masters+1):
+            group = 0 # Masters, ranks 1 to nr_masters
+        else:
+            group = 1 # Workers, with world rank 0 as leader
+
+        newcomm = comm.Split(group,1)
+
+        # Check we have enough resources
+        nr_workers = comm_size - nr_masters - 1
+        if nr_workers <= nr_masters and not check:
+            e1=u"Too few mpi process reserved. Must have at least 1 worker per parallel calc + 1 lead worker"
+            e2=u"Requested: {:}={:}, comm_size={:} --> available_workers={:}".format(input_name, nr_masters, comm_size, nr_workers)
+            err.append(e1)
+            err.append(e2)
+        # Warn if nr_workers ~ nr_masters
+        if nr_workers <= nr_masters*1.5:
+            warn_str = u"Number of worker processes ({:}) is close to number of"+\
+                       u" master processes ({:}). Consider requesting more resources."
+            warn.append(warn_str.format(nr_workers, nr_masters))
+    else:
+        stdout = True
+        group = 0
+        newcomm = 1
+
+    if check:
+        warn.append(u"nr_calcs = {:}".format(nr_calcs))
+
+    return err, warn, newcomm, group, stdout
+
+def pynfam_mpi_init_2bconly(pynfam_inputs, nr_calcs, comm, check):
+    #pynfam mpi init when only calculating 2bc. Therefore, we only need the lead worker, one master, and remaining workers.
+    err, warn = [], []
+    rank, comm_size = pynfam_mpi_traits(comm)
+
+    input_name = u"nr_parallel_calcs"
+    nr_masters = 1 #only 1 master.
+    rerun      = pynfam_inputs[u'rerun_mode']
+
+    # Set nr_masters here if nr_parallel_calcs is set to use defaults or inconsistent.
+    warn_str = None
+    if nr_masters:
+        if nr_masters > nr_calcs:
+            warn_str = u"Supplied {:}={:}, but nr_calcs={:}. Using {:}={:}."
+            warn_str = warn_str.format(input_name, nr_masters, nr_calcs, input_name, nr_calcs)
+            nr_masters = nr_calcs
+        elif comm_size == 1 and nr_masters > 1:
+            warn_str = u"Supplied {:}={:} for serial calculation. Using {:}=1."
+            warn_str = warn_str.format(input_name, nr_masters, input_name)
+            nr_masters = 1
+    else:
+        # False type (False, None, 0) invokes default value without warning message
+        nr_masters = nr_calcs
+    if warn_str: warn.append(warn_str)
+
+
+    # Split into master/worker groups
     if comm_size > 1:
         stdout = False
 

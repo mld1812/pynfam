@@ -1153,8 +1153,8 @@ contains
       
          ! Parameters
          g0p =    n0*(2*(cs0+csr*rho_c**sigma_s) + 2*ct*kf*kf + 2*cf*kf*kf/3)
-         g1p = -2*n0*ct*kf*kf - 2*cf*kf*kf/3
-         h0p = n0*2*kf*kf*cf/3
+         g1p = -2*n0*ct*kf*kf - 2*n0*cf*kf*kf/3
+         h0p = n0*kf*kf*cf/3
 
          write(st, '(1x,"rho_00  = ",1f15.9,";   k_F     = ",1f15.9)') rho_c, kf     ; call writelog(st)
          write(st, '(1x,"m*/m    = ",1f15.9,";   N0^(-1) = ",1f15.9)') effmass, 1/n0 ; call writelog(st)

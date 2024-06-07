@@ -7,5 +7,5 @@
 #SBATCH --time=00-04:00:00   #format days-hh:mm:ss
 
 ulimit -s unlimited 
-mpirun run_pynfam3.py
+mpirun run_pynfam5.py
 

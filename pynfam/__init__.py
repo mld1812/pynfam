@@ -5,7 +5,7 @@
 from .pynfam_manager import pynfamManager
 
 # Function for the executable script
-from .mpi_workflow   import pynfam_mpi_calc
+from .mpi_workflow   import pynfam_mpi_calc, pynfam_mpi_calc_tbc
 
 # Function to run checks and create/submit batch scripts
 from .submit_batch   import submit_batch_script
@@ -13,4 +13,4 @@ from .submit_batch   import submit_batch_script
 # Wrapper function / class for fitting
 from .pynfam_fit_wrapper import pynfam_fit_wrapper
 from .pynfam_fit_wrapper import pynfam_residual
-from .pynfam_fit_wrapper import pynfam_fit_wrapper_HFBonly
+from .pynfam_fit_wrapper import pynfam_fit_wrapper_HFB_or_tbc_only
