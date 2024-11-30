@@ -46,7 +46,7 @@ contains
       call openlog(output_txtfile, print_stdout)
       call print_main_header
       call setup_extfield
-
+      !call print_main_header !Testing purposes
       ! Prepare ifam
       !---------------------------------------------------------------
       ! 1. Allocate Block Matices:
@@ -571,7 +571,7 @@ contains
       !11/5/23: since the rest of the code for the two body current mode is designed to handle the GT part, I won't mess with that and 
       !instead just carve out an exception for the P operator with two body current. also only run the two body part if operator = GT.
       !11/29: Add in two body current mode to setup_crossterms. If it's 0 then nothing should change, since set_use_2bc does nothing if it's 0.
-      if ((operator_name == 'P' .or. operator_name == 'PS0' .or. operator_name == 'RS0' .or. operator_name == 'RS1' .or. operator_name == 'RS2') .and. two_body_current_mode /= 0) then
+      if ((operator_name == 'P' .or. operator_name == 'PS0' .or. operator_name == 'RS0' .or. operator_name == 'RS1' .or. operator_name == 'RS2' .or. operator_name == 'RS0I' .or. operator_name == 'RS1I') .and. two_body_current_mode /= 0) then
          call init_external_field(beta_type=beta_type, label=operator_name, k=operator_k, op=f, use_2bc = two_body_current_mode)
       else
          call init_external_field(beta_type=beta_type, label=operator_name, k=operator_k, op=f)

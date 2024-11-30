@@ -65,7 +65,7 @@ module pnfam_extfield
           case ('F', 'GT')
              op%parity_even = .true.
           ! Forbidden decays
-          case ('RS0', 'RS1', 'RS2', 'R', 'P', 'PS0')
+          case ('RS0', 'RS1', 'RS2', 'R', 'P', 'PS0', 'RS0I', 'RI', 'RS1I')
              op%parity_even = .false.
           case default
              call error_unknown_operator(trim(op%label))
@@ -76,9 +76,9 @@ module pnfam_extfield
  
        ! Rank (needed for rotational energy correction)
        select case (op%label)
-          case ('F', 'RS0', 'PS0')
+          case ('F', 'RS0', 'PS0', 'RS0I')
              op%rank = 0
-          case ('GT', 'R', 'P', 'RS1')
+          case ('GT', 'R', 'P', 'RS1', 'RI', 'RS1I')
              op%rank = 1
           case ('RS2')
              op%rank = 2
@@ -132,7 +132,8 @@ module pnfam_extfield
        integer :: xl1, xl2, xs1, xs2
        real(dp), dimension(nghl) :: wf_1, wf_2, dr_wf_2, dz_wf_2, dr_wf_1, dz_wf_1, r
        real(dp), dimension(nghl) :: rho_fac, rhon, rhop
-       real(dp), dimension(nghl) :: correction_2bc_vector, correction_2bc_axial_charge, correction_2bc_rsL
+       real(dp), dimension(nghl) :: correction_2bc_vector, correction_2bc_axial_charge, correction_2bc_rsL, I_func
+       logical :: rsL_snm
        ! DME Direct
        !real(dp), dimension(nghl) :: d2z_wf_1, d2r_wf_1, drz_wf_1
        !real(dp), dimension(nghl) :: d2z_wf_2, d2r_wf_2, drz_wf_2
@@ -179,8 +180,18 @@ module pnfam_extfield
              rho_fac = rho_fac + dme_exc()
           end if
        end if
+       ! November 2024: Test out using the I function with R, RS0, RS1. Calculate I_func if we're using one of these operators
+       if (label == 'RS0I' .or. label == 'RI' .or. label == 'RS1I') then
+        I_func = calculate_I1111_r()
+       end if
+
        ! 3/7/24 Need to call init_extfield_2bc_type to initialize those variables when label = rsL and two body current mode is active
-       if (op%use_2bc(4) /= 0 .and. (label == 'RS0' .or. label == 'RS1' .or. label == 'RS2')) then
+       if (op%use_2bc(4) >= 2 .and. (label == 'RS0' .or. label == 'RS1' .or. label == 'RS2' .or. label == 'RS0I' .or. label == 'RS1I')) then
+         !8/21/24 If use_2bc(4) = 3, then use asymmetric nuclear matter for RSL calcs.
+         rsL_snm = .true.
+         if (op%use_2bc(4) == 3) then
+             rsL_snm = .false.
+         endif
           call init_extfield_2bc_type(.false.)
        end if
        ! Loop over the FAM block structure to do the calculation
@@ -317,7 +328,17 @@ module pnfam_extfield
                             end if
                       end select
  
- 
+                    case ('RI') ! 11/11/24: Try experimenting with using the full expression for I(1,1,1,1; r). Just need to add a factor of (1 - )
+                        select case (K)
+                           case (0)
+                              if ((xl1 == xl2) .and. (xs1 == xs2)) then
+                                 op%mat%elem(ipt) = dot_product(I_func(:) * wf_1(:), z(:)*wf_2(:)) !element multiply wavefunction 2
+                              end if
+                           case (1,-1)
+                              if ((xl1 == xl2 + K) .and. (xs1 == xs2)) then
+                                 op%mat%elem(ipt) = -K/sqrt(2.0_dp)*dot_product(I_func(:) * wf_1(:), r(:)*wf_2(:)) !element-multiply wavefunction 2 by the radius. 
+                              end if
+                        end select
                    ! P (p_K/i)
                    ! ------------------------------
                    case ('P')
@@ -363,28 +384,51 @@ module pnfam_extfield
                    ! ------------------------------
                    case ('RS0')
                       if ((xl1 == xl2) .and. (xs1 == xs2)) then
-                         if (op%use_2bc(4) == 1) then 
-                            correction_2bc_rsL = forbidden_2bc_rsL()
+                         if (op%use_2bc(4) >= 2) then 
+                            correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
                             op%mat%elem(ipt) = -xs1*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), z(:)*wf_2(:))
                          else
                             op%mat%elem(ipt) = -xs1*dot_product(wf_1(:), z(:)*wf_2(:))
                          end if
                       else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
-                         if (op%use_2bc(4) == 1) then 
-                            correction_2bc_rsL = forbidden_2bc_rsL()
+                         if (op%use_2bc(4) >= 2) then 
+                            correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
                             op%mat%elem(ipt) = -dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                          else
                             op%mat%elem(ipt) = -dot_product(wf_1(:), r(:)*wf_2(:))
                          end if
                       else if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
-                         if (op%use_2bc(4) == 1) then 
-                            correction_2bc_rsL = forbidden_2bc_rsL()
+                         if (op%use_2bc(4) >= 2) then 
+                            correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
                             op%mat%elem(ipt) = -dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                          else
                             op%mat%elem(ipt) = -dot_product(wf_1(:), r(:)*wf_2(:))
                          end if
                       end if
  
+                    case ('RS0I') !RS0 with I(1,1,1,1) function. Element-multiply the I function.
+                        if ((xl1 == xl2) .and. (xs1 == xs2)) then
+                           if (op%use_2bc(4) >= 2) then 
+                              correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
+                              op%mat%elem(ipt) = -xs1*dot_product(I_func(:) * wf_1(:) * (1.0_dp - correction_2bc_rsL), z(:)*wf_2(:))
+                           else
+                              op%mat%elem(ipt) = -xs1*dot_product(I_func(:) * wf_1(:), z(:)*wf_2(:))
+                           end if
+                        else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
+                           if (op%use_2bc(4) >= 2) then 
+                              correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
+                              op%mat%elem(ipt) = -dot_product(I_func(:) * wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
+                           else
+                              op%mat%elem(ipt) = -dot_product(I_func(:) * wf_1(:), r(:)*wf_2(:))
+                           end if
+                        else if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
+                           if (op%use_2bc(4) >= 2) then 
+                              correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
+                              op%mat%elem(ipt) = -dot_product(I_func(:) * wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
+                           else
+                              op%mat%elem(ipt) = -dot_product(I_func(:) * wf_1(:), r(:)*wf_2(:))
+                           end if
+                        end if
  
                    ! RS1 ([rY_1 x sigma]_1K/Y_00)
                    ! ------------------------------
@@ -392,15 +436,15 @@ module pnfam_extfield
                       select case (K)
                          case (0)
                             if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
-                               if (op%use_2bc(4) == 1) then
-                                  correction_2bc_rsL = forbidden_2bc_rsL()
+                               if (op%use_2bc(4) >= 2) then
+                                  correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
                                   op%mat%elem(ipt) = sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:),r(:)*wf_2(:))
                                end if
                             else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
-                               if (op%use_2bc(4) == 1) then
-                                  correction_2bc_rsL = forbidden_2bc_rsL()
+                               if (op%use_2bc(4) >= 2) then
+                                  correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
                                   op%mat%elem(ipt) = -sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:)* (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = -sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:),r(:)*wf_2(:))
@@ -408,22 +452,57 @@ module pnfam_extfield
                             end if
                          case (1,-1)
                             if ((xl1 == xl2) .and. (xs1 == xs2 + 2*K)) then
-                               if (op%use_2bc(4) == 1) then
-                                  correction_2bc_rsL = forbidden_2bc_rsL()
+                               if (op%use_2bc(4) >= 2) then
+                                  correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
                                   op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:)* (1.0_dp - correction_2bc_rsL),z(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:), z(:)*wf_2(:))
                                end if
                             else if ((xl1 == xl2 + K) .and. (xs1 == xs2)) then
-                               if (op%use_2bc(4) == 1) then
-                                  correction_2bc_rsL = forbidden_2bc_rsL()
+                               if (op%use_2bc(4) >= 2) then
+                                  correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
                                   op%mat%elem(ipt) = -xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:)* (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = -xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:), r(:)*wf_2(:))
                                end if
                             end if
                       end select
- 
+
+                    case ('RS1I','rs1I') !RS1 with I(1,1,1,1) function. Element-multiply the I function
+                        select case (K)
+                           case (0)
+                              if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
+                                 if (op%use_2bc(4) >= 2) then
+                                    correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
+                                    op%mat%elem(ipt) = sqrt(3.0_dp/2.0_dp)*dot_product(I_func(:) * wf_1(:) * (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
+                                 else
+                                    op%mat%elem(ipt) = sqrt(3.0_dp/2.0_dp)*dot_product(I_func(:) * wf_1(:),r(:)*wf_2(:))
+                                 end if
+                              else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
+                                 if (op%use_2bc(4) >= 2) then
+                                    correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
+                                    op%mat%elem(ipt) = -sqrt(3.0_dp/2.0_dp)*dot_product(I_func(:) * wf_1(:)* (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
+                                 else
+                                    op%mat%elem(ipt) = -sqrt(3.0_dp/2.0_dp)*dot_product(I_func(:) * wf_1(:),r(:)*wf_2(:))
+                                 end if 
+                              end if
+                           case (1,-1)
+                              if ((xl1 == xl2) .and. (xs1 == xs2 + 2*K)) then
+                                 if (op%use_2bc(4) >= 2) then
+                                    correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
+                                    op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(I_func(:) * wf_1(:)* (1.0_dp - correction_2bc_rsL),z(:)*wf_2(:))
+                                 else
+                                    op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(I_func(:) * wf_1(:), z(:)*wf_2(:))
+                                 end if
+                              else if ((xl1 == xl2 + K) .and. (xs1 == xs2)) then
+                                 if (op%use_2bc(4) >= 2) then
+                                    correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
+                                    op%mat%elem(ipt) = -xs1*sqrt(3.0_dp)/2.0_dp*dot_product(I_func(:) * wf_1(:)* (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
+                                 else
+                                    op%mat%elem(ipt) = -xs1*sqrt(3.0_dp)/2.0_dp*dot_product(I_func(:) * wf_1(:), r(:)*wf_2(:))
+                                 end if
+                              end if
+                        end select
  
                    ! RS2 ([rY_1 x sigma]_2K/Y_00)
                    ! ------------------------------
@@ -431,22 +510,22 @@ module pnfam_extfield
                       select case (K)
                          case (0)
                             if ((xl1 == xl2) .and. (xs1 == xs2)) then
-                               if (op%use_2bc(4) == 1) then
-                                  correction_2bc_rsL = forbidden_2bc_rsL()
+                               if (op%use_2bc(4) >= 2) then
+                                  correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
                                   op%mat%elem(ipt) = xs1*sqrt(2.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), z(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = xs1*sqrt(2.0_dp)*dot_product(wf_1(:), z(:)*wf_2(:))
                                end if 
                             else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
-                               if (op%use_2bc(4) == 1) then
-                                  correction_2bc_rsL = forbidden_2bc_rsL()
+                               if (op%use_2bc(4) >= 2) then
+                                  correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
                                   op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:), r(:)*wf_2(:))
                                end if 
                             else if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
-                               if (op%use_2bc(4) == 1) then
-                                  correction_2bc_rsL = forbidden_2bc_rsL()
+                               if (op%use_2bc(4) >= 2) then
+                                  correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
                                   op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:), r(:)*wf_2(:))
@@ -454,15 +533,15 @@ module pnfam_extfield
                             end if
                          case (1,-1)
                             if ((xl1 == xl2) .and. (xs1 == xs2 + 2*K)) then
-                               if (op%use_2bc(4) == 1) then
-                                  correction_2bc_rsL = forbidden_2bc_rsL()
+                               if (op%use_2bc(4) >= 2) then
+                                  correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
                                   op%mat%elem(ipt) = -K*sqrt(3.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), z(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = -K*sqrt(3.0_dp)*dot_product(wf_1(:), z(:)*wf_2(:))
                                end if
                             else if ((xl1 == xl2 + K) .and. (xs1 == xs2)) then
-                               if (op%use_2bc(4) == 1) then
-                                  correction_2bc_rsL = forbidden_2bc_rsL()
+                               if (op%use_2bc(4) >= 2) then
+                                  correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
                                   op%mat%elem(ipt) = -K*xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = -K*xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:), r(:)*wf_2(:))
@@ -470,8 +549,8 @@ module pnfam_extfield
                             end if
                          case (2,-2)
                             if ((xl1 == xl2 + K/2) .and. (xs1 == xs2 + K)) then
-                               if (op%use_2bc(4) == 1) then
-                                  correction_2bc_rsL = forbidden_2bc_rsL()
+                               if (op%use_2bc(4) >= 2) then
+                                  correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
                                   op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:), r(:)*wf_2(:))
@@ -487,7 +566,7 @@ module pnfam_extfield
                             if (op%use_2bc(6) == 1) then !assign 2bc correction array
                                correction_2bc_axial_charge = forbidden_2bc_PS0()
                             else if (op%use_2bc(6) == 2) then !use DME
-                               correction_2bc_axial_charge = dme_axial()
+                               correction_2bc_axial_charge = dme_axial_2()
                             end if
                             if (op%use_2bc(1) == 0 .or. op%use_2bc(6) == 0) then !just one body
                                op%mat%elem(ipt) = -xs1*dot_product(wf_1(:), dz_wf_2(:))
@@ -500,7 +579,7 @@ module pnfam_extfield
                             if (op%use_2bc(6) == 1) then
                                correction_2bc_axial_charge = forbidden_2bc_PS0()
                             else if (op%use_2bc(6) == 2) then !use DME
-                               correction_2bc_axial_charge = dme_axial()
+                               correction_2bc_axial_charge = dme_axial_2()
                             end if
                             if (op%use_2bc(1) == 0 .or. op%use_2bc(6) == 0) then !just one body
                                op%mat%elem(ipt) = -dot_product(wf_1(:), dr_wf_2(:))      &
@@ -516,7 +595,7 @@ module pnfam_extfield
                             if (op%use_2bc(6) == 1) then
                                correction_2bc_axial_charge = forbidden_2bc_PS0()
                             else if (op%use_2bc(6) == 2) then !use DME
-                               correction_2bc_axial_charge = dme_axial()
+                               correction_2bc_axial_charge = dme_axial_2()
                             end if
                             if (op%use_2bc(1) == 0 .or. op%use_2bc(6) == 0) then !just one body
                                op%mat%elem(ipt) = -dot_product(wf_1(:), dr_wf_2(:))      &
@@ -559,7 +638,7 @@ module pnfam_extfield
                 call error_wrong_parity(label)
              end if
           ! Odd parity - parity_even .eqv. .FALSE.
-          case  ('RS0', 'RS1', 'RS2', 'R', 'P', 'PS0')
+          case  ('RS0', 'RS1', 'RS2', 'R', 'P', 'PS0', 'RI', 'RS0I', 'RS1I')
              if (pty .eqv. .true.) then
                 call error_wrong_parity(label)
              end if
@@ -579,12 +658,12 @@ module pnfam_extfield
  
        select case (label)
           ! Kmax = 0
-          case ('F', 'RS0', 'PS0')
+          case ('F', 'RS0', 'PS0', 'RS0I')
              if (abs(K) > 0) then
                 call error_K_out_of_range(label, 0)
              end if
           ! Kmax = 1
-          case  ('GT', 'R', 'P', 'RS1')
+          case  ('GT', 'R', 'P', 'RS1', 'RI', 'RS1I')
              if (abs(K) > 1) then
                 call error_K_out_of_range(label, 1)
              end if
@@ -784,10 +863,10 @@ module pnfam_extfield
        number_crossterms = 0
        if (op%parity_even .eqv. .false.) then
           select case (trim(op%label))
-             case ('R', 'P', 'RS1')
-                number_crossterms = 3
-             case ('RS0', 'PS0')
-                number_crossterms = 2
+             case ('R', 'P', 'RS1', 'RI', 'RS1I')
+                number_crossterms = 5 !With addition of RI, RS1I
+             case ('RS0', 'PS0', 'RS0I')
+                number_crossterms = 3 !With addition of RS0I
              case default
                 number_crossterms = 0
           end select
@@ -830,7 +909,7 @@ module pnfam_extfield
           ! should be compared with the expected cross-term orderings in the
           ! computation of forbidden decay rates!
           ! J = 0
-          if (nxterms == 2) then
+          if (nxterms == 3) then
              ! OP x RS0
              ixterm = 1
              call init_external_field(cbeta(ibeta), label='RS0', k=op%k, op=crossterms(ixterm), use_2bc = use_2bc)
@@ -839,8 +918,12 @@ module pnfam_extfield
              ixterm = 2
              call init_external_field(cbeta(ibeta), label='PS0', k=op%k, op=crossterms(ixterm), use_2bc = use_2bc)
              crossterms(ixterm)%label = trim(op%label)//'x'//trim(crossterms(ixterm)%label)
+             ! OP x RS0I
+             ixterm = 3
+             call init_external_field(cbeta(ibeta), label='RS0I', k=op%k, op=crossterms(ixterm), use_2bc = use_2bc)
+             crossterms(ixterm)%label = trim(op%label)//'x'//trim(crossterms(ixterm)%label)
           ! J = 1
-          else if (nxterms == 3) then
+          else if (nxterms == 5) then
              ! OP x R
              ixterm = 1
              call init_external_field(cbeta(ibeta), label='R', k=op%k, op=crossterms(ixterm))
@@ -851,11 +934,15 @@ module pnfam_extfield
              crossterms(ixterm)%label = trim(op%label)//'x'//trim(crossterms(ixterm)%label)
              ! OP x P
              ixterm = 3
-             !if (present(use_2bc)) then
-             !   call init_external_field(cbeta(ibeta), label='P', k=op%k, op=crossterms(ixterm), use_2bc = use_2bc)
-             !else
              call init_external_field(cbeta(ibeta), label='P', k=op%k, op=crossterms(ixterm), use_2bc = use_2bc)
-             !end if 
+             crossterms(ixterm)%label = trim(op%label)//'x'//trim(crossterms(ixterm)%label)
+             ! OP x RI
+             ixterm = 4
+             call init_external_field(cbeta(ibeta), label='RI', k=op%k, op=crossterms(ixterm), use_2bc = use_2bc)
+             crossterms(ixterm)%label = trim(op%label)//'x'//trim(crossterms(ixterm)%label)
+             ! OP x RS1I
+             ixterm = 5
+             call init_external_field(cbeta(ibeta), label='RS1I', k=op%k, op=crossterms(ixterm), use_2bc = use_2bc)
              crossterms(ixterm)%label = trim(op%label)//'x'//trim(crossterms(ixterm)%label)
           end if
        end if
@@ -1060,25 +1147,45 @@ module pnfam_extfield
  
     !3/5/24: 2 body correction term for the rsL operators (expansion of e^-iqr term with two-body Gamow-Teller term).
     !See arXiv:1403.7860v1 "Chiral Two-Body Currents and Neutrinoless Double-Beta Decay" eq 7, "Large-scale nuclear structure calculations for spin-dependent WIMP scattering" eq 14
-    function forbidden_2bc_rsL() result (iout)
+    !The expression matches with the symmetric nuclear matter effective 2bc for the Gamow-Teller operator.
+    !(Contact term in rho_fac is rho * cd / (Mn * Fpi^2); exchange term in tbc_nmlda_i1 is rho/(Mn * Fpi^2) * (I_0(rho)*(2/3 c4 - 1/3 c3 + 1/6))
+    function forbidden_2bc_rsL(use_snm) result (iout)
        use hfb_solution, only : nghl
        use hfb_solution, only : hfb_density_coord
        use type_extfield_2bc, only : caux,c3,c4, cd
-       use pnfam_constants, only : Mpi, hbarc, IT_ISOSCALAR
+       use pnfam_constants, only : Mpi, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON
        implicit none
-       real(dp), dimension(nghl) :: rho, kf, i0, iout
+       logical, optional, intent(in) :: use_snm
+       logical :: snm
+       real(dp), dimension(nghl) :: rho, kf, i0, iout, rhon, rhop
        real(dp) :: m, ca, ch
        character(200) :: st
+       if(.not. present(use_snm)) then
+         snm = .true. !Default: true (use symmetric nuclear matter)
+       else
+         snm = use_snm
+       endif
+       
        ! Constants
        m = Mpi/hbarc
        ca = 2*caux
        ch = 1._dp/3._dp*(2*c4 - c3 + 0.5_dp)
  
        ! Densities
-       call hfb_density_coord(IT_ISOSCALAR, rho)
-       kf = lda_kf_snm(rho)
-       i0 = tbc_nmlda_I0_vec(kf)
-       iout = ca*rho*(cd+ch*i0)
+       if (snm) then
+         call hfb_density_coord(IT_ISOSCALAR, rho)
+         kf = lda_kf_snm(rho)
+         i0 = tbc_nmlda_I0_vec(kf)
+         iout = ca*rho*(cd+ch*i0)
+       else
+         call hfb_density_coord(IT_NEUTRON,rhon)
+         call hfb_density_coord(IT_PROTON, rhop)
+         iout = ca*(rhon + rhop)*cd + ca*ch*rhon*tbc_nmlda_I0_vec(lda_kf_asnm(rhon)) + ca*ch*rhop*tbc_nmlda_I0_vec(lda_kf_asnm(rhop))
+       endif
+       !call hfb_density_coord(IT_ISOSCALAR, rho)
+       !kf = lda_kf_snm(rho)
+       !i0 = tbc_nmlda_I0_vec(kf)
+       !iout = ca*rho*(cd+ch*i0)
  
        !testing
        !write(st,'(a20,f10.5,a20,f10.5,a20)') 'iout value for kf ', kf(10), 'iout', iout(10), 'in gt2bc.'
@@ -1222,7 +1329,7 @@ module pnfam_extfield
        !character(len=200) :: st
          ! Constants
        !P = 50.0_dp / hbarc !determine an acceptable value for P. 50 MeV? convert to fm^-1. 
-       P = sqrt(1.2)*1.361 / 2.0 
+       P = sqrt(1.2)*1.30465 / 2.0 
        !P = 0.5477_dp * MAXVAL(kf)
        m = Mpi/hbarc
          ! DME integrals
@@ -1243,7 +1350,7 @@ module pnfam_extfield
        !write(st,'(a13,f16.3,a13, f16.3,a21)') 'max of rf  : ', MAXVAL(rf), 'min of rf  : ', MINVAL(rf), 'in forbidden 2bc exc.'
        !call writelog(st)
     end function
-         
+ 
     function forbidden_2bc_PS0() result (rf)
        use hfb_solution, only : nghl, hfb_density_coord
        use pnfam_constants, only : Mpi, Fpi, Mn, hbarc, gA, pi, IT_ISOSCALAR
@@ -1252,7 +1359,7 @@ module pnfam_extfield
        real(dp) :: P, m
          ! Constants
        !divide by zero error when using smaller P values..
-       P = 275.0 / hbarc
+       P = sqrt(1.2)*1.30465 / 2.0 
        !P = sqrt(1.2)*1.361 / 2.0 !determine an acceptable value for P. Try using the Fermi gas mean value? (P = sqrt(6/5) * kF^2 / 2)
        !P = 0.5477_dp * MAXVAL(kf)
        m = Mpi / hbarc
@@ -1281,7 +1388,7 @@ module pnfam_extfield
        m = Mpi/hbarc
        u11 = 1.5_dp / (kf * kf) * (atan(2.0_dp*kf/m) - 2.0_dp*kf*m/(4.0_dp*kf*kf + m*m))
     end function
- 
+
     !separate function for U_11/kF^2
     function dme_u11_kf2(kf) result(u11)
        use hfb_solution, only : nghl
@@ -1438,29 +1545,77 @@ module pnfam_extfield
        end do 
     end function
  
-    !DME current for the axial charge term.
-    function dme_axial() result(rf)
-       use hfb_solution, only : nghl
-       use hfb_solution, only : hfb_density_coord, d2rho, tau
-       use pnfam_constants, only : Mpi, Mn, Fpi, pi, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON
-       implicit none
-       real(dp), dimension(nghl) :: rho, kf, u11, u11_kf2, u1_1, rf, d2r0, tau0
- 
+    !DME current for the axial charge term. Note: This is the wrong version (Sept 2024)
+    !function dme_axial() result(rf)
+    !   use hfb_solution, only : nghl
+    !   use hfb_solution, only : hfb_density_coord, d2rho, tau
+    !   use pnfam_constants, only : Mpi, Mn, Fpi, pi, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON
+    !   implicit none
+    !   real(dp), dimension(nghl) :: rho, kf, u11, u11_kf2, u1_1, rf, d2r0, tau0
+    !
        ! Densities
-       call hfb_density_coord(IT_ISOSCALAR, rho)
-       d2r0 = d2rho(:,IT_NEUTRON)+d2rho(:,IT_PROTON)
-       tau0 = tau(:,IT_NEUTRON)+tau(:,IT_PROTON)
+    !   call hfb_density_coord(IT_ISOSCALAR, rho)
+    !   d2r0 = d2rho(:,IT_NEUTRON)+d2rho(:,IT_PROTON)
+    !   tau0 = tau(:,IT_NEUTRON)+tau(:,IT_PROTON)
  
        ! DME integrals
-       kf = lda_kf_snm(rho) ! 1/fm
-       u11 = dme_u11(kf) ! fm^2
-       u11_kf2 = dme_u11_kf2(kf)
-       u1_1 = dme_u1_1(kf) ! fm^2
+    !   kf = lda_kf_snm(rho) ! 1/fm
+    !   u11 = dme_u11(kf) ! fm^2
+    !   u11_kf2 = dme_u11_kf2(kf)
+    !   u1_1 = dme_u1_1(kf) ! fm^2
  
        !adjust for the additional factor of kf included in U_1^-1 calculation.
        !according to Dr Engel, in constant density nuclear matter, only the first term involving U_1^{-1} is nonzero since the term with tau0 cancels that with 0.6
-       rf = hbarc*Mn/(6.0_dp*Fpi*Fpi) * (u1_1 *(2.0_dp/(3.0_dp*pi*pi)) + 0.6_dp*u11*rho + u11_kf2*(0.25_dp*d2r0 - tau0))
-    end function
+    !   rf = hbarc*Mn/(6.0_dp*Fpi*Fpi) * (u1_1 *(2.0_dp/(3.0_dp*pi*pi)) + 0.6_dp*u11*rho + u11_kf2*(0.25_dp*d2r0 - tau0))
+    !end function
+
+    function dme_axial_2() result(rf) !9/14/24: Updated dme axial charge. 
+        use hfb_solution, only : nghl
+        use hfb_solution, only : hfb_density_coord, d2rho, tau
+        use pnfam_constants, only : Mpi, Mn, Fpi, pi, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON
+        implicit none
+        real(dp), dimension(nghl) :: rho, kf, u12, u12_kf2, u10, rf, d2r0, tau0, u11, u11_kf2, u1_1, rf_olddme
+        character(len=200) :: st
+        logical :: exists
+        integer :: loopvar
+
+        ! Densities
+        call hfb_density_coord(IT_ISOSCALAR, rho)
+        d2r0 = d2rho(:,IT_NEUTRON)+d2rho(:,IT_PROTON)
+        tau0 = tau(:,IT_NEUTRON)+tau(:,IT_PROTON)
+  
+        ! DME integrals
+        kf = lda_kf_snm(rho) ! 1/fm
+        
+        u10 = dme_u10(kf) 
+        u12 = dme_u12(kf)
+        u12_kf2 = dme_u12_kf2(kf)
+  
+        u11 = dme_u11(kf) ! fm^2
+        u11_kf2 = dme_u11_kf2(kf)
+        u1_1 = dme_u1_1(kf) ! fm^2
+ 
+        !adjust for the additional factor of kf included in U_1^-1 calculation.
+        !according to Dr Engel, in constant density nuclear matter, only the first term involving U_1^{-1} is nonzero since the term with tau0 cancels that with 0.6
+        !rf_olddme = hbarc*Mn/(6.0_dp*Fpi*Fpi) * (u1_1 *(2.0_dp/(3.0_dp*pi*pi)) + 0.6_dp*u11*rho + u11_kf2*(0.25_dp*d2r0 - tau0))
+
+        !according to Dr Engel, in constant density nuclear matter, only the first term involving U_1^{-1} is nonzero since the term with tau0 cancels that with 0.6
+        rf = hbarc*Mn/(6.0_dp*Fpi*Fpi) * ((u10 + 0.1_dp * u12) * rho + u12_kf2 / 6.0_dp * (0.25_dp*d2r0 - tau0))
+
+        !Print out rf - rf-olddme for testing.
+        !inquire(file="rf_comparison_dme.txt", exist=exists)
+        !if (exists .eqv. .false.) then
+        !  open(12, file = 'rf_comparison_dme.txt', status = 'new')
+        !   do loopvar=1,nghl  
+        !      write(12,*) rf(loopvar)
+        !      write(12, *) rf_olddme(loopvar)
+        !   end do  
+        !   close(12)
+        !endif
+        !write(st,'(a20,f10.5,a20,f10.5,a20)') 'rf_olddme: ', rf_olddme(1), ' rf: ', kf(1), 'in dme.'
+        !call writelog(st)
+
+     end function
  
     !DME current for the vector current term.
     function dme_vector() result(rf)
@@ -1509,11 +1664,11 @@ module pnfam_extfield
        !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ((u12_kf2/6.0_dp - u24_kf4))
  
        !try writing output to a file. check if exists first - only write once
-       !inquire(file="rf_part1_dme_updated.txt", exist=exists)
+       !inquire(file="kf_dme_test.txt", exist=exists)
        !if (exists .eqv. .false.) then
-       !   open(12, file = 'rf_part1_dme_updated.txt', status = 'new')
+       !   open(12, file = 'kf_dme_test.txt', status = 'new')
        !   do loopvar=1,nghl  
-       !      write(12,*) rf(loopvar)
+       !      write(12,*) kf(loopvar)
        !   end do  
        !   close(12)
        !endif
@@ -1521,4 +1676,45 @@ module pnfam_extfield
        !call writelog(st)
        ! Full expression - multiply by 1/prefactor = -Mn.
     end function
+
+    !November 2024: Compute the I(1,1,1,1; r) function. Described in p. 126 of Behrens, or in Evan's thesis 
+    !Previously and in other works (ex. Suhonen, Schopper) we used the approximation that this was just equal to 3/2. 
+    !Test out whether using the full function makes a significant difference?
+    function calculate_I1111_r() result(I)
+        use hfb_solution, only : nghl, y, z, hfb_npr
+        implicit none
+        real(dp), dimension(nghl) :: I, r, radius
+        real(dp) :: nuclear_radius
+        !character(len=200) :: st
+        !logical :: exists
+        integer :: loopvar, A
+        ! Get A from hfb_npr
+        A = hfb_npr(3)
+        ! Calculate nuclear radius as 1.2 fm * A^1/3
+        nuclear_radius = 1.2_dp * A ** (1.0_dp/3.0_dp)
+        ! Define r(:) = 1/(1/rho), since y=1/rho
+        r(:) = 1.0_dp/y(:)
+        ! Define radius as sqrt(r^2 + z^2). Units of both are also in fm, see hfbtho_storage in hfbtho fortran files.
+        radius(:) = (r**2 + z**2)**0.5_dp
+        !Calculate the I function. See Behrens, 
+        do loopvar=1,nghl
+            if (radius(loopvar) <= nuclear_radius) then 
+                I(loopvar) = 1.5_dp * (1.0_dp - 0.2_dp * radius(loopvar)**2 / (nuclear_radius**2)) 
+            else 
+                I(loopvar) = 1.5_dp * (nuclear_radius / radius(loopvar) - 0.2_dp * (nuclear_radius**3) / (radius(loopvar)**3))
+            endif
+        end do
+  
+        !try writing output to a file. check if exists first - only write once
+        !inquire(file="I_func.txt", exist=exists)
+        !if (exists .eqv. .false.) then
+        !   open(12, file = 'I_func.txt', status = 'new')
+        !   do loopvar=1,nghl  
+        !      write(12,*) I(loopvar)
+        !   end do  
+        !   close(12)
+        !endif
+        !call writelog(st)
+        ! Full expression - multiply by 1/prefactor = -Mn.
+     end function
  end module pnfam_extfield
