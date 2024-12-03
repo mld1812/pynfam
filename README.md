@@ -1,7 +1,7 @@
 # Overview
 
 This repository contains the python package *pynfam* which includes the functions,
-classes, and methods for running large-scale beta decay caluclations with the fortran
+classes, and methods for running large-scale beta decay calculations with the fortran
 codes hfbtho and pnfam. It contains an executable script *run_pynfam.py* through which
 the user can supply all necessary inputs for one or more beta decay calculations,
 which are parallelized with mpi4py.

@@ -641,7 +641,7 @@ class shapeFactor(phaseSpace):
             # Allowed terms (recall b[op][K-DNE] = 0)
             #--------------------------------------------------------------
             C[u'F'][k]  = b[u'F'][k]*ps[u'f2']
-            C[u'GT'][k] = LAM**2*b[u'GT'][k]*ps[u'f2']
+            C[u'GT'][k] = LAM**2 * b[u'GT'][k]*ps[u'f2'] #assume GA = 1 for the GT, so we can assign GA = 1.27 for first forbidden.
 
             #if self.ffk_err[k]: continue #11/29/23: try removing these conditions. may lead to unphysical rates
             #--------------------------------------------------------------

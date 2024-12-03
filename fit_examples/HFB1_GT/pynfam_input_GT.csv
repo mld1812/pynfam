@@ -1,7 +1,0 @@
-# For GTR, the search region is the experimental value +/- 4 MeV. 
-# With the rational interpolation of strength function, only 20 points need to be computed. 
-label,category,Z,N,A,exp,energy_min,energy_max,half_width,de_hw_ratio,deformation,sigma
-208Pb,GT,82,126,208,15.6,11.6,19.6,0.5,0.8,S,1.0
-112Sn,GT,50,62,112,8.94,4.94,12.94,0.5,0.8,,1.0
-90Zr,GT,40,50,90,8.7,4.7,12.7,0.5,0.8,S,1.0
-132Sn,GT,50,82,132,16.3,12.3,20.3,0.5,0.8,S,1.0

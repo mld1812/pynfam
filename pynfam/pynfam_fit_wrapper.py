@@ -52,6 +52,8 @@ subkey_cat['g1p'] = 'scaled_params'
 subkey_cat['h0p'] = 'scaled_params'
 # scaled isoscalar pairing
 subkey_cat['vpair_t0_scaled'] = 'scaled_params'
+# 7/5/24: add cD low-energy constant (2bc)
+subkey_cat['two_body_lec_cD'] = 'scaled_params'
 # pynfam_inputs
 subkey_cat['gs_def_scan'] = 'pynfam_inputs'
 subkey_cat['beta_type'] = 'pynfam_inputs'
@@ -401,6 +403,16 @@ def to_couplings(override_settings, functional_info):
             vpair_t1 = np.abs(np.average((functional_info['CpV0(0)='], functional_info['CpV0(1)='])))
         override_settings['fam']['vpair_t0'] = vpair_t0_scaled * vpair_t1
 
+    #7/5/24: Deal with two_body_lecs
+    two_body_lec_cD = params_dict.pop('two_body_lec_cD', None)
+    if two_body_lec_cD is not None:
+        #check existing override_settings value.
+        if 'two_body_current_lecs' in override_settings['fam'].keys() and override_settings['fam']['two_body_current_lecs'] is not None:
+            override_settings['fam']['two_body_current_lecs'][2] = two_body_lec_cD
+        else:
+            default_lecs = DEFAULTS['fam']['EXT_FIELD']['two_body_current_lecs']
+            default_lecs[2] = two_body_lec_cD
+            override_settings['fam']['two_body_current_lecs'] = default_lecs
     # Start converting from Landau parameters to couplings
     x1 = params_dict.pop('x1', None)
     g0p = params_dict.pop('g0p', None)
@@ -581,7 +593,8 @@ def detaildf_process_GTSD(output_df, category, label, column_name, converter, Z,
                 rsL = missing_K[2] #get the L from rsL
                 kval = missing_K[5] #get the K from rsL-kK
                 #load RSL-K0.out and add to strength_list with k=kval.
-                detail_df = pd.read_csv(f'RS{rsL}-K0.out', delim_whitespace=True, header=0, comment=u'#', index_col=0)
+                detail_path_k0 = os.path.join(detail_dir_path, f'RS{rsL}-K0.out')
+                detail_df = pd.read_csv(detail_path_k0, delim_whitespace=True, header=0, comment=u'#', index_col=0)
                 op_name = f'RS{rsL}_K{kval}'
                 output_df['S('+op_name+')'] = detail_df['Re(Strength)'] + 1j*detail_df['Im(Strength)']
                 output_df['Conv('+op_name+')'] = (detail_df['Conv'] == 'Yes')
@@ -997,6 +1010,10 @@ def pynfam_fit_wrapper_root(input_data, categories, override_setts_fit, override
         # neutron / proton numbers
         override_settings['hfb']['proton_number'] = tuple(data['Z'])
         override_settings['hfb']['neutron_number'] = tuple(data['N'])
+        #7/25/24: Change so that for resonance calcs (GT/SD), two body current mode is turned off.
+        if category == 'GT' or category == 'SD':
+            if 'two_body_current_mode' in override_settings['fam']:
+                del override_settings['fam']['two_body_current_mode']
         # deformation info given in input dataframe
         if 'deformation' in data.columns:
             hfb_gs_def_scan = []
@@ -1153,6 +1170,8 @@ def pynfam_fit_wrapper_root(input_data, categories, override_setts_fit, override
             # remove unnecessary ctr keys
             override_settings['ctr'] = {x: val for x, val in override_settings['ctr'].items() \
                                        if x in DEFAULTS['ctr']['CONSTR'].keys() or x == 'energy_min' or x == 'energy_max'}
+            if category == 'SD':
+                override_settings['fam']['compute_crossterms'] = False #don't compute crossterms for SD - 6/26/24
         elif category == 'HL': # beta decay half-life
             to_couplings(override_settings, functional_info) # convert scaled parameters to couplings
             pynfam_inputs['fam_mode']['fam_contour'] = 'CIRCLE'
@@ -1427,6 +1446,8 @@ def pynfam_fit_wrapper(
     # check consistency of parameters between processes
     if mu.do_mpi:
         assert_consistency = comm.bcast(assert_consistency, root=0)
+    #7/26/24: Rarely an error occurs where assert_consistency becomes an array. So, try checking if it's an array.
+    print(f'Assert_consistency: {assert_consistency}, do_mpi: {mu.do_mpi}, comm_size: {comm_size}')
     if assert_consistency and mu.do_mpi and comm_size > 1:
         flag = True
         my_params = locals()
@@ -1975,6 +1996,8 @@ def pynfam_fit_wrapper_root_hfb_or_tbc(input_data, categories, override_setts_fi
 
     for ind, category in enumerate(categories):
         printf('Category:', category)
+        if calc_tbc and category != "HL":
+            continue #7/25/24: skip if we're calculating 2bc and category is not HL (ie resonance)
         model_results = []
         output_dfs = []
         conv_info = []

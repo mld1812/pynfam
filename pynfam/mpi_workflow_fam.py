@@ -54,8 +54,9 @@ def initialize_fam_2bc(comm, mgr, fam_ops, setts, rerun, stdout, nshells):
             msg = [f"Error encountered initializing 2BC:{err_msg}"]
             pynfam_warn(msg, mgr.paths.calclabel, err_run)
     elif len(GT_Ks_requested) == 1:
-        #run the singular object.
-        err_msg = fam_rep.runExe(stdout)
+        #run the singular object. 
+        err_msg = GT_Ks_requested[0].runExe(stdout)
+        #err_msg = fam_rep.runExe(stdout)
         if err_msg is not None:
             msg = [f"Error encountered initializing 2BC:{err_msg}"]
             pynfam_warn(msg, mgr.paths.calclabel, True)
