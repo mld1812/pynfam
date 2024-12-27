@@ -56,7 +56,8 @@ class lsLogger(object):
             float_format = None
 
         # Replace None with np.nan
-        frame.fillna(value=np.nan, inplace=True)
+        #12/18/24: Use this to ignore the warning that pandas throws.
+        frame.infer_objects().fillna(value=np.nan, inplace=True)
         # Pandas automatically truncates strings at 50 chars, as of now
         # the way to fix this is through the display options.
         pd.set_option('display.max_colwidth', 100)
@@ -80,7 +81,7 @@ class lsLogger(object):
         """
 
         file2open = os.path.join(file_path, self.filename)
-        df = pd.read_csv(file2open, delim_whitespace=True, header=header, comment=comment)
+        df = pd.read_csv(file2open, sep=r'\s+', header=header, comment=comment)
         return df
 
     #-----------------------------------------------------------------------

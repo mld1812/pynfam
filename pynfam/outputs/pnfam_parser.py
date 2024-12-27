@@ -100,7 +100,7 @@ class pnfamParser(parser):
             list of dict: Of form {'label: str, 'val': float} for each column.
         """
         try:
-            df = pd.read_csv(self.src, delim_whitespace=True, header=0, comment=u'#', index_col=0)
+            df = pd.read_csv(self.src, sep=r'\s+', header=0, comment=u'#', index_col=0)
             df.drop(df.index[0], inplace=True) # Drop the energy
             # Labels = Re(Strength) Im(Strength) Re(Xterm) Im(Xterm)...
             labels   = [ir+lab+")" for lab in list(df.index) for ir in [u"Re(", u"Im("]]
@@ -123,7 +123,7 @@ class pnfamParser(parser):
             list of dict: Of form {'label: str, 'val': float} for each column.
         """
         try:
-            df = pd.read_csv(self.src, delim_whitespace=True, header=0, comment=u'#', index_col=0)
+            df = pd.read_csv(self.src, sep=r'\s+', header=0, comment=u'#', index_col=0)
             df.drop(df.index[0], inplace=True) # Drop the energy
             xterms   = list(df.index)[1:]
         except Exception:
@@ -210,7 +210,7 @@ class strengthOutParser(parser):
             ndarray
         """
         try:
-            df = pd.read_csv(self.src, delim_whitespace=True, header=0, comment=u'#')
+            df = pd.read_csv(self.src, sep=r'\s+', header=0, comment=u'#')
             conv_list = df[u'Conv'].dropna().values
         except Exception:
             conv_list = np.array([self.str_err])
@@ -226,7 +226,7 @@ class strengthOutParser(parser):
             ndarray
         """
         try:
-            df = pd.read_csv(self.src, delim_whitespace=True, header=0, comment=u'#')
+            df = pd.read_csv(self.src, sep=r'\s+', header=0, comment=u'#')
             time_list = df[u'Time'].dropna().values
         except Exception:
             time_list = np.array([self.float_err])

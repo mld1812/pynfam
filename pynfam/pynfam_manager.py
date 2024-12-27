@@ -715,7 +715,11 @@ class pynfamManager(object):
                         log_r.reset_index(drop=True, inplace=True) # Turn index=Rate to index=0
                         # Hacky way to keep scientific notation for rates, but apply
                         # float format to everything else, by changing to strings
-                        log_r = log_r.applymap(u'{:.6e}'.format)
+                        #12/18/24: For pandas > 2.1, use map instead of applymap
+                        if pd.__version__ >= '2.1.0':
+                            log_r = log_r.map(u'{:.6e}'.format)
+                        else:
+                            log_r = log_r.applymap(u'{:.6e}'.format)
                         log_sub=pd.concat([log_b, log_r], axis=1, sort=False)
                         logs_sub.append(log_sub)
                     log = pd.concat(logs_sub, axis=0)

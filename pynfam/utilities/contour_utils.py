@@ -302,7 +302,8 @@ def multiple_qeff(labels, setts, hfb_gs, ctr_main):
     Egs  = eqrpamax - Q_hfb
 
     # Force Q_eff to be iterable
-    Q_effi = np.array(pso._settings[u'Q_eff'], copy=False, ndmin=1)
+    Q_effi = np.asarray(pso._settings[u'Q_eff']) #12/16: WIth sycamore, use asarray.
+    #Q_effi = np.array(pso._settings[u'Q_eff'], copy=False, ndmin=1)
     Q_eff = pso._settings[u'Q_eff']
     Q_mode = int(pso._settings[u'Q_eff_mode'])
 

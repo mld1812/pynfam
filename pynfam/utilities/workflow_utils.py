@@ -575,7 +575,10 @@ def get_fam_ops(key, beta_type):
                u'R'    : (1,-1),
                u'RS0'  : (0,-1),
                u'RS1'  : (1,-1),
-               u'RS2'  : (2,-1)
+               u'RS2'  : (2,-1), 
+               u'RS0I' : (0,-1),
+               u'RS1I' : (1,-1),
+               u'RI'   : (1,-1)
                }
     # Wrapper keys - {key : (J's, pi's)}
     keys = {u'ALL'      : ([0,1,2], [+1,-1]),
@@ -590,7 +593,7 @@ def get_fam_ops(key, beta_type):
             u'2-'       : ([2]    , [-1])
             }
     # Some keys can only use part of ops in the given (J's, pi's)
-    op_constrain = {u'SPINDIPOLE': {'RS0','RS1','RS2'}}
+    op_constrain = {u'SPINDIPOLE': {'RS0','RS1','RS2', 'RS0I', 'RS1I'}}
 
     if beta_type == u'c':
         beta_type = u'+'

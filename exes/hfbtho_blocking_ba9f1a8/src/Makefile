@@ -8,7 +8,7 @@ COMPILE_DIR = $(shell pwd)
 #   - FORTRAN_MPI ..........: actual name of the Fortran compiler. Standard choices are gfortran, mpif90, ifort, xlf2008_r, etc.
 COMPUTER    = DESKTOP
 COMPILER    = IFORT
-FORTRAN_MPI = ifort
+FORTRAN_MPI = ifx
 # Build options (TRUE or FALSE)
 #   - VERBOSE ..............: 0: short display; 1: full command displayed
 #   - DEBUG ................: activates debugging options for each compiler
@@ -21,7 +21,7 @@ DOCUMENTATION = FALSE
 #   - USE_OPENMP ...........: enables OpenMP multithreading
 #   - USE_PETSC ............: uses Petsc library for ...
 USE_ESSL   = 0
-USE_OPENMP = 1
+USE_OPENMP = 0
 USE_PETSC  = 0
 # Physics options
 #   - USE_MPI .............: 1, ANL optimization
@@ -54,8 +54,12 @@ USE_QRPA         = 0
 #                            -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread
 #   - LINUX DESKTOP
 #       * local ...........: -L$(HOME)/local/lib -llapack_LINUX -lblas_LINUX
+#	  #LINEAR_ALGEBRA =  -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -I${MKLROOT}/include -Wl,-rpath,${MKLROOT}/lib/intel64/
+IFORT_OPT = -O3
 ifeq ($(COMPUTER),DESKTOP)
-      LINEAR_ALGEBRA = -L/usr/lib/x86_64-linux-gnu -llapack -L/usr/lib/x86_64-linux-gnu -lblas
+      #LINEAR_ALGEBRA = -L/usr/lib/x86_64-linux-gnu -llapack -L/usr/lib/x86_64-linux-gnu -lblas
+	  LINEAR_ALGEBRA =  -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -I"${MKLROOT}/include" -Wl,-rpath,${MKLROOT}/lib
+      IFORT_OPT = -O3 -axCORE-AVX512
 endif
 ifeq ($(COMPUTER),QUARTZ)
       VERSION_LIBRARY = mkl-2020.0
@@ -110,9 +114,9 @@ HFBTHO_EXE     = hfbtho_main
 HFBTHO_SOURCE  = hfbtho_main.f90
 HFBTHO_OBJ     = hfbtho_main.o
 
-# Defining compiler options for: IFORT FORTRAN COMPILER (ifort)
+# Defining compiler options for: IFORT FORTRAN COMPILER (ifort). 12/15/24 Note: when using ifx, use extend-source instead of extend_source
 ifeq ($(COMPILER),IFORT)
-      FORMAT_F90   = -fPIC -free -extend_source
+      FORMAT_F90   = -fPIC -free -extend-source
       PREPROCESSOR = -fpp -DUSE_OPENMP=$(USE_OPENMP) \
                           -DUSE_MPI=$(USE_MPI)  \
                           -DUSE_PETSC=$(USE_PETSC) \
@@ -125,7 +129,7 @@ ifeq ($(COMPILER),IFORT)
                           -DUSE_QRPA=$(USE_QRPA) \
                           -DUSE_ESSL=$(USE_ESSL) $(FFLAGS)
       ifeq ($(DEBUG),FALSE)
-            OPTIONS = $(PREPROCESSOR) -O3
+            OPTIONS = $(PREPROCESSOR) $(IFORT_OPT) #12/20/24: Add additional optimizations other than O3
       else
             OPTIONS = $(PREPROCESSOR) -g -check all -warn nodeclarations -warn nounused
       endif

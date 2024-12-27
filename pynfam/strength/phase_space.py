@@ -254,7 +254,7 @@ class phaseSpace(object):
         """ The standard beta decay phase space integrand used for beta-plus/beta-minus/FT-EC. """
 
         wx = np.asarray(wx)
-        f = np.zeros_like(wx, dtype=np.float_)
+        f = np.zeros_like(wx, dtype=np.float64)
 
         # Avoid invalid values (for 0T open contours above EQRPAmax)
         wx[wx<1.0] = 1.0
@@ -362,12 +362,12 @@ class phaseSpace(object):
         """
 
         w0 = np.asarray(w0)
-        gn = np.ones_like(w0, dtype=np.float_)
+        gn = np.ones_like(w0, dtype=np.float64)
         # Allow complex values, but force int to float
         if np.iscomplex(w0).any():
-            f = np.zeros_like(w0, dtype=np.complex_)
+            f = np.zeros_like(w0, dtype=np.complex128)
         else:
-            f = np.zeros_like(w0, dtype=np.float_)
+            f = np.zeros_like(w0, dtype=np.float64)
 
         if n not in list(range(1,7)):
             raise ValueError(u"Phase space factor n takes values 1 to 6.")
@@ -801,9 +801,9 @@ def lambda_ke(ke, Zd, A, w, sc=False):
     w = np.asarray(w)
 
     # Initialize
-    f0  = np.zeros_like(w, dtype=np.float_)
-    fk  = np.zeros_like(w, dtype=np.float_)
-    lke = np.zeros_like(w, dtype=np.float_)
+    f0  = np.zeros_like(w, dtype=np.float64)
+    fk  = np.zeros_like(w, dtype=np.float64)
+    lke = np.zeros_like(w, dtype=np.float64)
 
     if not np.isreal(w).all():
         raise ValueError("lambda_ke got complex energy argument.")
@@ -914,17 +914,17 @@ def Fermi(F, Zd, A, w, sc=False):
     w = np.asarray(w)
 
     # Initialize arrays
-    p          = np.zeros_like(w, dtype=np.float_)
-    pref       = np.zeros_like(w, dtype=np.float_)
-    factor     = np.zeros_like(w, dtype=np.float_)
-    p_us       = np.zeros_like(w, dtype=np.float_)
-    y          = np.zeros_like(w, dtype=np.float_)
-    ln_expy    = np.zeros_like(w, dtype=np.float_)
-    garg       = np.zeros_like(w, dtype=np.complex_)
-    ln_gamnum1 = np.zeros_like(w, dtype=np.complex_)
-    ln_gamnum2 = np.zeros_like(w, dtype=np.complex_)
-    ln_F       = np.zeros_like(w, dtype=np.complex_)
-    result     = np.zeros_like(w, dtype=np.float_)
+    p          = np.zeros_like(w, dtype=np.float64)
+    pref       = np.zeros_like(w, dtype=np.float64)
+    factor     = np.zeros_like(w, dtype=np.float64)
+    p_us       = np.zeros_like(w, dtype=np.float64)
+    y          = np.zeros_like(w, dtype=np.float64)
+    ln_expy    = np.zeros_like(w, dtype=np.float64)
+    garg       = np.zeros_like(w, dtype=np.complex128)
+    ln_gamnum1 = np.zeros_like(w, dtype=np.complex128)
+    ln_gamnum2 = np.zeros_like(w, dtype=np.complex128)
+    ln_F       = np.zeros_like(w, dtype=np.complex128)
+    result     = np.zeros_like(w, dtype=np.float64)
 
     if not np.isreal(w).all():
         raise ValueError("Fermi function got complex energy argument.")

@@ -35,18 +35,23 @@ COMPILE_DIR = $(shell pwd)
 #                           Compile-Time Options                               #
 #==============================================================================#
 COMPILER_TYPE = IFORT
-COMPILER = ifort
+COMPILER = ifx
 
 VERBOSE   = 0
 DEBUG     = FALSE
-USE_OPENMP= 1
+USE_OPENMP= 0
 # Turn above on with two-body currents
 
 USE_HBLAS = 1
 READ_FUNCTIONAL = 0
 
 # Library (L) and header/mod files (I)
-L_LINEARALGEBRA = -L/usr/lib/x86_64-linux-gnu -lblas -llapack
+#L_LINEARALGEBRA = -L/usr/lib/x86_64-linux-gnu -lblas -llapack
+#12/20/24: For dogwood/sycamore, use MKL
+L_LINEARALGEBRA = -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -I"${MKLROOT}/include" -Wl,-rpath,${MKLROOT}/lib
+IFORT_OPT = -O3 -axCORE-AVX512 
+ # LINEAR_ALGEBRA =  -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -I${MKLROOT}/include
+
 #L_HFBTHO = -L../hfbtho_gitlab/src/hfbtho -lhfbtho
 #I_HFBTHO = -I../hfbtho_gitlab/src/hfbtho
 
@@ -57,9 +62,9 @@ I_HFBTHO = -I../hfbtho_blocking_ba9f1a8/src/hfbtho
 #==============================================================================#
 #              Override Library Locations for Specific Machines                #
 #==============================================================================#
-ifneq ($(shell hostname | grep dogwood),)
-  L_LINEARALGEBRA = -mkl
-endif
+#ifneq ($(shell hostname | grep dogwood),)
+#  L_LINEARALGEBRA = -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl -I${MKLROOT}/include
+#endif
 
 #==============================================================================#
 #                           Typical compiler flags                             #
@@ -71,9 +76,9 @@ ifeq ($(COMPILER_TYPE),IFORT)
       PREPROCESSOR = -fpp -DUSE_ADLB=$(USE_ADLB) \
                           -DUSE_HBLAS=$(USE_HBLAS) \
                           -DREAD_FUNCTIONAL=$(READ_FUNCTIONAL)
-      FORMAT_F90   = -fPIC -free -extend_source
+      FORMAT_F90   = -fPIC -free -extend-source
       ifeq ($(DEBUG),FALSE)
-            OPTIONS = $(PREPROCESSOR) -O3
+            OPTIONS = $(PREPROCESSOR) $(IFORT_OPT)
       else
             OPTIONS = $(PREPROCESSOR) -g -check all -warn nodeclarations -warn nounused
       endif

@@ -507,8 +507,8 @@ class famStrength(object):
 
         # Types - hopefully identical to those used in fortran
         int_type = np.int32
-        dbl_type = np.float_
-        cmp_type = np.complex_
+        dbl_type = np.float64
+        cmp_type = np.complex128
         cha_type = np.bytes_
 
         version = 3
@@ -577,8 +577,8 @@ class famStrength(object):
         """
 
         int_type = np.int32
-        dbl_type = np.float_
-        cmp_type = np.complex_
+        dbl_type = np.float64
+        cmp_type = np.complex128
         cha_type = np.bytes_
 
         if fname is None: fname  = self.file_bin

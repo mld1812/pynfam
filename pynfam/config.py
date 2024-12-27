@@ -230,4 +230,4 @@ NA       = 6.022140858e23   # Avogadros number [1/mol]
 KB       = 8.6173304e-11    # Boltzmann constant [MeV/K]
 TMIN     = 1.0*1e9*KB       # Temperature cutoff [MeV] below which FT prefactor is assumed a unit step
 
-EPSILON  = np.finfo(np.float_).eps # machine precision for double
+EPSILON  = np.finfo(np.float64).eps # machine precision for double

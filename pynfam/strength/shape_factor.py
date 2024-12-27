@@ -6,7 +6,15 @@ from builtins   import object
 from builtins   import str
 # -------------- Utilities -----------------
 from collections     import defaultdict
-from scipy.integrate import trapz, simps, cumtrapz
+#12/27/24: Scipy.integrate.trapz, simps, cumtrapz were deprecated in scipy 1.12
+import scipy
+scipy_version = scipy.__version__.split('.')
+if int(scipy_version[0]) == 1 and int(scipy__version[1]) < 12:
+    from scipy.integrate import trapz, simps, cumtrapz
+else:
+    #Import the new versions but call them trapz, simps, cumtrapz
+    from scipy.integrate import trapezoid as trapz, simpson as simps, cumulative_trapezoid as cumtrapz
+
 import numpy  as np
 import pandas as pd
 import datetime
@@ -98,14 +106,14 @@ class shapeFactor(phaseSpace):
     k1_fops_raw = [u'P_K1', u'R_K1', u'RS1_K1', u'RS2_K1']
     k2_fops_raw = [u'RS2_K2']
     #11/26/23: list of operators by J + K 
-    j0_k0_fops_raw = [u'PS0_K0', u'RS0_K0']
-    j1_k0_fops_raw = [u'P_K0', u'R_K0', u'RS1_K0']
+    j0_k0_fops_raw = [u'PS0_K0', u'RS0_K0', u'RS0I_K0']
+    j1_k0_fops_raw = [u'P_K0', u'R_K0', u'RS1_K0', u'RI_K0', u'RS1I_K0']
     j1_k1_fops_raw = [u'P_K1', u'R_K1', u'RS1_K1']
-    fops_j_dict = {u'PS0': 0, u'RS0': 0, u'P': 1, u'R': 1, u'RS1': 1, u'RS2': 2}
+    fops_j_dict = {u'PS0': 0, u'RS0': 0, u'P': 1, u'R': 1, u'RS1': 1, u'RS2': 2, u'RI': 1, u'RS0I': 0, u'RS1I': 1}
     # Complete list of 8 bare operators and 4 cross terms
     al_ops = [u'F', u'GT']
-    ff_ops = [u'P', u'R', u'PS0', u'RS0', u'RS1', u'RS2']
-    xts    = [u'RS0_PS0', u'R_RS1', u'P_RS1', u'R_P']
+    ff_ops = [u'P', u'R', u'PS0', u'RS0', u'RS1', u'RS2', 'RI', 'RS0I', 'RS1I'] #11/28/24: Update with new I-operators
+    xts    = [u'RS0_PS0', u'R_RS1', u'P_RS1', u'R_P', 'RS0I_RS0', 'RS0I_PS0', 'RI_R', 'RI_RS1', 'RI_P', 'RI_RS1I', 'RS1I_R', 'RS1I_RS1', 'RS1I_P']
 
     # Shape factor labels by J. The R index indicates the phase space factor to use
     CJ0_keys = [u'J0_R1',u'J0_R2']
@@ -559,7 +567,13 @@ class shapeFactor(phaseSpace):
                u'R_K1'   : (Tk[u'K>0']*np.sqrt(3.0)/HBAR_MEC),
                u'RS1_K1' :(-Tk[u'K>0']/HBAR_MEC),
                u'RS2_K1' : (Tk[u'K>0']/HBAR_MEC),
-               u'RS2_K2' : (Tk[u'K>0']/HBAR_MEC)}
+               u'RS2_K2' : (Tk[u'K>0']/HBAR_MEC),
+               u'RS0I_K0':  1.0/HBAR_MEC,
+               u'RS1I_K0': (-Tk[u'K=0']/HBAR_MEC),
+               u'RS1I_K1':(-Tk[u'K>0']/HBAR_MEC),
+               u'RI_K0'  :(Tk[u'K=0']*np.sqrt(3.0)/HBAR_MEC),
+               u'RI_K1'  :(Tk[u'K>0']*np.sqrt(3.0)/HBAR_MEC)
+               }
 
         #--------------------------------------------------------------
         # Sort raw strength/xterms by operator and k, and add in prefactors.
@@ -583,7 +597,8 @@ class shapeFactor(phaseSpace):
                     cstr = s.cstr_df_zeroed
             #if self.ffk_err[k] and genop not in shapeFactor.al_ops_raw:
             #    continue
-            #11/26 implement new condition to only skip if crossterm components aren't computed. alternately, disable this check altogether
+            #11/26/23 implement new condition to only skip if crossterm components aren't computed. alternately, disable this check altogether
+            #11/26/24: Ignore it fo rnow
             if genop not in shapeFactor.al_ops_raw and self.ffjk_err(bareop, k):
                 print("Skipped because missing crossterms")
                 continue
@@ -611,6 +626,37 @@ class shapeFactor(phaseSpace):
                 xterm = u'RxP'
                 assert_equal(s.cstr_df, self.strengths[u'P_K'+str(k)].cstr_df, xterm)
                 b[u'R_P'][k] = pre[u'R_K'+str(k)]*pre[u'P_K'+str(k)]*cstr[xterm]
+            #11/28/24: New crossterms for I-terms
+            if bareop == u'RS0I':
+                xterm = u'RS0IxRS0'
+                assert_equal(s.cstr_df, self.strengths[u'RS0_K'+str(k)].cstr_df,xterm)
+                b[u'RS0I_RS0'][k] = pre[u'RS0I_K'+str(k)]*pre[u'RS0_K'+str(k)]*cstr[xterm]
+                xterm = u'RS0IxPS0'
+                assert_equal(s.cstr_df, self.strengths[u'PS0_K'+str(k)].cstr_df,xterm)
+                b[u'RS0I_PS0'][k] = pre[u'RS0I_K'+str(k)]*pre[u'PS0_K'+str(k)]*cstr[xterm]
+            if bareop == u'RI':
+                xterm = u'RIxR'
+                assert_equal(s.cstr_df, self.strengths[u'R_K'+str(k)].cstr_df,xterm)
+                b[u'RI_R'][k] = pre[u'RI_K'+str(k)]*pre[u'R_K'+str(k)]*cstr[xterm]
+                xterm = u'RIxP'
+                assert_equal(s.cstr_df, self.strengths[u'P_K'+str(k)].cstr_df,xterm)
+                b[u'RI_P'][k] = pre[u'RI_K'+str(k)]*pre[u'P_K'+str(k)]*cstr[xterm]
+                xterm = u'RIxRS1'
+                assert_equal(s.cstr_df, self.strengths[u'RS1_K'+str(k)].cstr_df,xterm)
+                b[u'RI_RS1'][k] = pre[u'RI_K'+str(k)]*pre[u'RS1_K'+str(k)]*cstr[xterm]
+                xterm = u'RIxRS1I'
+                assert_equal(s.cstr_df, self.strengths[u'RS1I_K'+str(k)].cstr_df,xterm)
+                b[u'RI_RS1I'][k] = pre[u'RI_K'+str(k)]*pre[u'RS1I_K'+str(k)]*cstr[xterm]
+            if bareop == u'RS1I':
+                xterm = u'RS1IxR'
+                assert_equal(s.cstr_df, self.strengths[u'R_K'+str(k)].cstr_df,xterm)
+                b[u'RS1I_R'][k] = pre[u'RS1I_K'+str(k)]*pre[u'R_K'+str(k)]*cstr[xterm]
+                xterm = u'RS1IxP'
+                assert_equal(s.cstr_df, self.strengths[u'P_K'+str(k)].cstr_df,xterm)
+                b[u'RS1I_P'][k] = pre[u'RS1I_K'+str(k)]*pre[u'P_K'+str(k)]*cstr[xterm]
+                xterm = u'RS1IxRS1'
+                assert_equal(s.cstr_df, self.strengths[u'RS1_K'+str(k)].cstr_df,xterm)
+                b[u'RS1I_RS1'][k] = pre[u'RS1I_K'+str(k)]*pre[u'RS1_K'+str(k)]*cstr[xterm]
         #np.savetxt("bb.txt", b[u'PS0'][0]) #TESTSAVE
         return b
 
@@ -634,40 +680,49 @@ class shapeFactor(phaseSpace):
         gamma1  = gam_ke(1, Zd) # Coulomb function (=sqrt(1 - (alpha*Zd)^2))
         xp      = w0max/3.0 + ec*0.5*ALPHA*Zd/rad # I(1,1,1,1;r) ~ 3/2
         xm      = w0max/3.0 - ec*0.5*ALPHA*Zd/rad # I(1,1,1,1;r) ~ 3/2
-        C = {term : {k : np.zeros(dim) for k in range(3)} for term in all_keys}
+        alphazed = ec*ALPHA*Zd/rad #11/29/24: Add this expression since we need to separate out the w0max/3 and Alpha*Zd/rad
 
+        C = {term : {k : np.zeros(dim) for k in range(3)} for term in all_keys}
         for k in range(3):
             #--------------------------------------------------------------
             # Allowed terms (recall b[op][K-DNE] = 0)
             #--------------------------------------------------------------
             C[u'F'][k]  = b[u'F'][k]*ps[u'f2']
-            C[u'GT'][k] = LAM**2 * b[u'GT'][k]*ps[u'f2'] #assume GA = 1 for the GT, so we can assign GA = 1.27 for first forbidden.
+            C[u'GT'][k] = LAM**2*b[u'GT'][k]*ps[u'f2']
 
             #if self.ffk_err[k]: continue #11/29/23: try removing these conditions. may lead to unphysical rates
             #--------------------------------------------------------------
             # J = 0 terms
             #--------------------------------------------------------------
+            #C[u'J0_R1'][k] = \
+            #        (-ec*2.0/3.0*LAM**2.0*(xp*b[u'RS0'][k] + b[u'RS0_PS0'][k]))*ps[u'f1']
+            #11/29/24: Updated expression with RS0I
             C[u'J0_R1'][k] = \
-                    (-ec*2.0/3.0*LAM**2.0*(xp*b[u'RS0'][k] + b[u'RS0_PS0'][k]))*ps[u'f1']
-            #C[u'J0_R1'][k] = \
-            #        (-ec*2.0/3.0*LAM**2.0*(xp*b[u'RS0'][k]))*ps[u'f1']
-            #C[u'J0_R1'][k] = \
-            #        (-ec*2.0/3.0*LAM**2.0*(b[u'RS0_PS0'][k]))*ps[u'f1']
+                    (-ec*2.0/3.0*LAM**2.0*(alphazed/3.0 * b[u'RS0I_RS0'][k]+w0max/3.0*b[u'RS0'][k]+b[u'RS0_PS0'][k]))*ps[u'f1']
+
+            #C[u'J0_R2'][k] = \
+            #        (LAM**2.0*((xp**2.0 + 1.0/9.0)*b[u'RS0'][k] +\
+            #        b[u'PS0'][k] + 2.0*xp*b[u'RS0_PS0'][k]))*ps[u'f2']
+            #11/29/24: Updated expression with RS0I
             C[u'J0_R2'][k] = \
-                    (LAM**2.0*((xp**2.0 + 1.0/9.0)*b[u'RS0'][k] +\
-                    b[u'PS0'][k] + 2.0*xp*b[u'RS0_PS0'][k]))*ps[u'f2']
-            #C[u'J0_R2'][k] = LAM**2.0 * (b[u'PS0'][k])*ps[u'f2'] #test: only PS0 contribution.
-            #C[u'J0_R2'][k] = (LAM**2.0*(xp**2.0 + 1.0/9.0)*b[u'RS0'][k])*ps[u'f2'] #test: only RS0 
-            #C[u'J0_R2'][k] = (LAM**2.0*((xp**2.0 + 1.0/9.0)*b[u'RS0'][k] + b[u'PS0'][k]))*ps[u'f2'] #test: PS0 + RS0 (no crossterms)
-            #C[u'J0_R2'][k] = LAM**2.0 * (2.0*xp*b[u'RS0_PS0'][k]) * ps[u'f2']
+                    (LAM**2.0*(b[u'PS0'][k] + b[u'RS0I'][k] * 1.0/9.0*alphazed**2.0 + b[u'RS0'][k] * w0max**2 / 9.0 +\
+                                2.0/9.0*alphazed*w0max*b[u'RS0I_RS0'][k] + 2.0/3.0*b[u'RS0I_PS0'][k]*alphazed + 2.0/3.0*b[u'RS0_PS0'][k]*w0max +\
+                                1.0/9.0*b[u'RS0'][k]))*ps[u'f2']
+            
             #--------------------------------------------------------------
             # J = 1 terms
             #--------------------------------------------------------------
+            #C[u'J1_R1'][k] = \
+            #        (-2.0/9.0*(ec*xp*b[u'R'][k] - ec*2.0*LAM**2.0*xm*b[u'RS1'][k]\
+            #        + LAM*np.sqrt(2.0)*(xp-xm)*b[u'R_RS1'][k]\
+            #        - ec*np.sqrt(3.0)*b[u'R_P'][k] - LAM*np.sqrt(6.0)*b[u'P_RS1'][k]))*ps[u'f1']
+            #11/29/24: Updated expression with RS1I, RI. xp, xm in line 2 come from R, RS1.
             C[u'J1_R1'][k] = \
-                    (-2.0/9.0*(ec*xp*b[u'R'][k] - ec*2.0*LAM**2.0*xm*b[u'RS1'][k]\
-                    + LAM*np.sqrt(2.0)*(xp-xm)*b[u'R_RS1'][k]\
+                    (-2.0/9.0*(ec*(w0max/3.0*b[u'R'][k] + alphazed/3.0*b[u'RI_R'][k]) - ec*2.0*LAM**2.0*(w0max/3.0*b[u'RS1'][k] - alphazed/3.0*b[u'RS1I_RS1'][k])\
+                    + LAM*np.sqrt(2.0)*alphazed/3.0*(b[u'RI_RS1'][k] + b[u'RS1I_R'][k])
                     - ec*np.sqrt(3.0)*b[u'R_P'][k] - LAM*np.sqrt(6.0)*b[u'P_RS1'][k]))*ps[u'f1']
- 
+
+            """
             C[u'J1_R2'][k] = \
                     (b[u'P'][k] +\
                     1.0/3.0*xp**2.0*b[u'R'][k] +\
@@ -683,14 +738,34 @@ class shapeFactor(phaseSpace):
             else:
                 C[u'J1_R2'][k] += -8.0/27.0*(LAM**2.0*b[u'RS1'][k] +\
                         (ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]))*mu1*gamma1*ps[u'f2']
-            #C[u'J1_R2'][k] = (np.sqrt(2.0/3.0) * -np.sqrt(2.0)*xp*b[u'R_P'][k] )* ps[u'f2']
-            #C[u'J1_R2'][k] = (2.0/3.0*LAM**2.0*xm**2.0*b[u'RS1'][k] + 1.0/27.0*2.0*LAM**2.0*b[u'RS1'][k] -\
-            #                   8.0/27.0*(LAM**2.0*b[u'RS1'][k]*mu1*gamma1))*ps[u'f2']
-            #C[u'J1_R2'][k] = (1.0/27.0*ec*2.0*np.sqrt(2.0)*LAM*b[u'R_RS1'][k] + np.sqrt(2.0/3.0) *\
-            #                   -ec*2.0/np.sqrt(3.0)*LAM*xm*xp*b[u'R_RS1'][k] - 8.0/27.0*ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]*mu1*gamma1) * ps[u'f2']
+            """
+            #11/29/24: Updated expression with RS1I, RI
+            C[u'J1_R2'][k] = \
+                    (b[u'P'][k] +\
+                    1.0/3.0*(w0max**2/9.0 * b[u'R'][k] + alphazed**2/9.0 * b[u'RI'][k] + 2.0/9.0*alphazed*w0max*b[u'RI_R'][k]) +\
+                    2.0/3.0*LAM**2.0*(w0max**2/9.0 * b[u'RS1'][k] + alphazed**2/9.0 * b[u'RS1I'][k] - 2.0/9.0*alphazed*w0max*b[u'RS1I_RS1'][k]) +\
+                    1.0/27.0*(b[u'R'][k] + 2.0*LAM**2.0*b[u'RS1'][k] +\
+                            ec*2.0*np.sqrt(2.0)*LAM*b[u'R_RS1'][k]) +\
+                    np.sqrt(2.0/3.0)*(ec*2.0*LAM*(w0max/3.0*b[u'P_RS1'][k] - alphazed/3.0*b[u'RS1I_P'][k]) -\
+                            np.sqrt(2.0)*(w0max/3.0*b[u'R_P'][k] + alphazed/3.0*b[u'RI_P'][k]) +\
+                            (-ec*2.0/np.sqrt(3.0)*LAM*(w0max**2/9.0*b[u'R_RS1'][k] + w0max*alphazed/9.0*(b[u'RI_RS1'][k] - b[u'RS1I_R'][k]) -\
+                                                        alphazed**2/9.0*b[u'RI_RS1I'][k]))))*ps[u'f2']
+            if self.beta == u'c' and not ft_active:
+                C[u'J1_R2'][k] += -8.0/27.0*(LAM**2.0*b[u'RS1'][k] +\
+                        (ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]))*ps[u'f1']*ps[u'f3']
+            # Regular free coulomb fcts for b+, b-, ecft
+            else:
+                C[u'J1_R2'][k] += -8.0/27.0*(LAM**2.0*b[u'RS1'][k] +\
+                        (ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]))*mu1*gamma1*ps[u'f2']
+            
+            #C[u'J1_R3'][k] = \
+            #        (4.0/3.0*(np.sqrt(2.0)/3.0*LAM*xp*b[u'R_RS1'][k] +\
+            #        -ec*2.0/3.0*LAM**2.0*xm*b[u'RS1'][k] +\
+            #        -np.sqrt(2.0/3.0)*LAM*b[u'P_RS1'][k]))*ps[u'f3']
+            #11/29/24: Updated expression with RS1, R1. The first 'xp' comes from the O_r operator, the second 'xm' comes from the O_rs1. 
             C[u'J1_R3'][k] = \
-                    (4.0/3.0*(np.sqrt(2.0)/3.0*LAM*xp*b[u'R_RS1'][k] +\
-                    -ec*2.0/3.0*LAM**2.0*xm*b[u'RS1'][k] +\
+                    (4.0/3.0*(np.sqrt(2.0)/3.0*LAM*(w0max/3.0*b[u'R_RS1'][k] + alphazed/3.0*b[u'RI_RS1'][k]) +\
+                    -ec*2.0/3.0*LAM**2.0*(w0max/3.0*b[u'RS1'][k] - alphazed/3.0*b[u'RS1I_RS1'][k]) +\
                     -np.sqrt(2.0/3.0)*LAM*b[u'P_RS1'][k]))*ps[u'f3']
 
             C[u'J1_R4'][k] = \
@@ -756,7 +831,7 @@ class shapeFactor(phaseSpace):
         # Populate the final dataframe by summing over appropriate strengths
         dim = len(self.contour.ctr_z)
         for fk in final_keys:
-            tmp = np.zeros(dim, dtype=np.complex_)
+            tmp = np.zeros(dim, dtype=np.complex128)
             for key2sum in final_keys[fk][u'keys']:
                 for k2sum in final_keys[fk][u'k']:
                     tmp += C[key2sum][k2sum]

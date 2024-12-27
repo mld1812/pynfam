@@ -571,7 +571,7 @@ def detaildf_process_GTSD(output_df, category, label, column_name, converter, Z,
     for detail_file in sorted(fnmatch.filter(os.listdir(detail_dir_path), detail_fnmatch)):
         detail_path = os.path.join(detail_dir_path, detail_file)
         if not os.path.isfile(detail_path): continue
-        detail_df = pd.read_csv(detail_path, delim_whitespace=True, header=0, comment=u'#', index_col=0)
+        detail_df = pd.read_csv(detail_path, sep=r'\s+', header=0, comment=u'#', index_col=0)
         op_name = detail_file[:-4].replace('-','_')
         output_df['S('+op_name+')'] = detail_df['Re(Strength)'] + 1j*detail_df['Im(Strength)']
         output_df['Conv('+op_name+')'] = (detail_df['Conv'] == 'Yes')
@@ -594,7 +594,7 @@ def detaildf_process_GTSD(output_df, category, label, column_name, converter, Z,
                 kval = missing_K[5] #get the K from rsL-kK
                 #load RSL-K0.out and add to strength_list with k=kval.
                 detail_path_k0 = os.path.join(detail_dir_path, f'RS{rsL}-K0.out')
-                detail_df = pd.read_csv(detail_path_k0, delim_whitespace=True, header=0, comment=u'#', index_col=0)
+                detail_df = pd.read_csv(detail_path_k0, sep=r'\s+', header=0, comment=u'#', index_col=0)
                 op_name = f'RS{rsL}_K{kval}'
                 output_df['S('+op_name+')'] = detail_df['Re(Strength)'] + 1j*detail_df['Im(Strength)']
                 output_df['Conv('+op_name+')'] = (detail_df['Conv'] == 'Yes')
@@ -1281,7 +1281,7 @@ def pynfam_fit_wrapper_root(input_data, categories, override_setts_fit, override
                 continue
 
             if category == 'GT' or category == 'SD': # Gamow-Teller or spin-dipole resonance
-                output_df = pd.read_csv(output_path, delim_whitespace=True, header=0, comment=u'#', index_col=0)
+                output_df = pd.read_csv(output_path, sep=r'\s+', header=0, comment=u'#', index_col=0)
                 peak_pos, num_error = detaildf_process_GTSD(output_df, category, label, column_name, converter, \
                                         data['Z'].iat[num], data['N'].iat[num], lambda_n[num], lambda_p[num], btypes[num], \
                                         detail_dir_path, detail_fnmatch, use_ratinterp)
@@ -1289,7 +1289,7 @@ def pynfam_fit_wrapper_root(input_data, categories, override_setts_fit, override
                 num_errors.append(num_error)
 
             elif category == 'HL': # beta decay half-life
-                output_df = pd.read_csv(output_path, delim_whitespace=True, header=0, comment=u'#', index_col=0)
+                output_df = pd.read_csv(output_path, sep=r'\s+', header=0, comment=u'#', index_col=0)
                 detaildf_process_HL(output_df, hfb_gs_def_scan[num] == (-2, (0.0,)))
                 model_results.append(output_df.at['Total', column_name])
                 #num_errors.append(output_df.at['Total', 'NumErr_'+column_name])
@@ -1447,7 +1447,7 @@ def pynfam_fit_wrapper(
     if mu.do_mpi:
         assert_consistency = comm.bcast(assert_consistency, root=0)
     #7/26/24: Rarely an error occurs where assert_consistency becomes an array. So, try checking if it's an array.
-    print(f'Assert_consistency: {assert_consistency}, do_mpi: {mu.do_mpi}, comm_size: {comm_size}')
+    #print(f'Assert_consistency: {assert_consistency}, do_mpi: {mu.do_mpi}, comm_size: {comm_size}')
     if assert_consistency and mu.do_mpi and comm_size > 1:
         flag = True
         my_params = locals()
