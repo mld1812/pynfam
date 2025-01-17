@@ -39,33 +39,31 @@ COMPILER = ifx
 
 VERBOSE   = 0
 DEBUG     = FALSE
-USE_OPENMP= 0
+USE_OPENMP= 1
 # Turn above on with two-body currents
 
 USE_HBLAS = 1
 READ_FUNCTIONAL = 0
 
+# Default optimization flags
+IFORT_OPT = -O3
+
 # Library (L) and header/mod files (I)
-#L_LINEARALGEBRA = -L/usr/lib/x86_64-linux-gnu -lblas -llapack
-#12/20/24: For dogwood/sycamore, use MKL
-L_LINEARALGEBRA = -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -I"${MKLROOT}/include" -Wl,-rpath,${MKLROOT}/lib
-IFORT_OPT = -O3 -axCORE-AVX512 
- # LINEAR_ALGEBRA =  -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -I${MKLROOT}/include
-
-#L_HFBTHO = -L../hfbtho_gitlab/src/hfbtho -lhfbtho
-#I_HFBTHO = -I../hfbtho_gitlab/src/hfbtho
-
+L_LINEARALGEBRA = -L/usr/lib/x86_64-linux-gnu -lblas -llapack
 L_HFBTHO = -L../hfbtho_blocking_ba9f1a8/src/hfbtho -lhfbtho
 I_HFBTHO = -I../hfbtho_blocking_ba9f1a8/src/hfbtho
 
 
 #==============================================================================#
-#              Override Library Locations for Specific Machines                #
+#    Override Library Locations and Optimization Flags for Specific Machines   #
 #==============================================================================#
-#ifneq ($(shell hostname | grep dogwood),)
-#  L_LINEARALGEBRA = -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl -I${MKLROOT}/include
-#endif
-
+ifneq ($(shell hostname | grep dogwood),)
+  L_LINEARALGEBRA = -qmkl
+endif
+ifneq ($(shell hostname | grep ruby),) #12/30/24 - May want to add more machines (Dane) in future.
+  L_LINEARALGEBRA = -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl -I"${MKLROOT}/include" -Wl,-rpath,${MKLROOT}/lib
+  IFORT_OPT = -O3 -xCORE-AVX2 -axCORE-AVX512 -fma 
+endif
 #==============================================================================#
 #                           Typical compiler flags                             #
 #==============================================================================#

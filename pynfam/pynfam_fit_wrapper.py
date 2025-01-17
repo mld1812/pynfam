@@ -1318,7 +1318,7 @@ def pynfam_fit_wrapper_root(input_data, categories, override_setts_fit, override
             conv_info.extend((False,)*len(data))
             maxsi_info.extend((np.nan,)*len(data))
         else:
-            log_df = pd.read_csv(log_path, delim_whitespace=True, header=0, comment=u'#', index_col=0)
+            log_df = pd.read_csv(log_path, sep=r'\s+', header=0, comment=u'#', index_col=0)
             HFB_Conv = (log_df['HFB_Conv'] == 'Yes')
             FAM_Conv = (log_df['FAM_Conv'] == 'Yes') if 'FAM_Conv' in log_df.columns else True
             Both_Conv = (HFB_Conv & FAM_Conv)
@@ -1448,6 +1448,7 @@ def pynfam_fit_wrapper(
         assert_consistency = comm.bcast(assert_consistency, root=0)
     #7/26/24: Rarely an error occurs where assert_consistency becomes an array. So, try checking if it's an array.
     #print(f'Assert_consistency: {assert_consistency}, do_mpi: {mu.do_mpi}, comm_size: {comm_size}')
+    assert_consistency = False #1/12/25: Since we're not using assert_consistency but for some reason it's sometimes turning into an array, just set it to False.
     if assert_consistency and mu.do_mpi and comm_size > 1:
         flag = True
         my_params = locals()

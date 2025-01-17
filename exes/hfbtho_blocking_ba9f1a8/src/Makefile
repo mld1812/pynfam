@@ -6,7 +6,7 @@ COMPILE_DIR = $(shell pwd)
 #   - COMPUTER..............: current choice is DESKTOP, QUARTZ LASSEN; only used to automatically set LINEAR_ALGEBRA below
 #   - COMPILER .............: type of compiler: GFORTRAN, IFORT, CRAY or IBM; used to automatically set compiler options
 #   - FORTRAN_MPI ..........: actual name of the Fortran compiler. Standard choices are gfortran, mpif90, ifort, xlf2008_r, etc.
-COMPUTER    = DESKTOP
+COMPUTER    = RUBY
 COMPILER    = IFORT
 FORTRAN_MPI = ifx
 # Build options (TRUE or FALSE)
@@ -21,7 +21,7 @@ DOCUMENTATION = FALSE
 #   - USE_OPENMP ...........: enables OpenMP multithreading
 #   - USE_PETSC ............: uses Petsc library for ...
 USE_ESSL   = 0
-USE_OPENMP = 0
+USE_OPENMP = 1
 USE_PETSC  = 0
 # Physics options
 #   - USE_MPI .............: 1, ANL optimization
@@ -57,9 +57,11 @@ USE_QRPA         = 0
 #	  #LINEAR_ALGEBRA =  -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -I${MKLROOT}/include -Wl,-rpath,${MKLROOT}/lib/intel64/
 IFORT_OPT = -O3
 ifeq ($(COMPUTER),DESKTOP)
-      #LINEAR_ALGEBRA = -L/usr/lib/x86_64-linux-gnu -llapack -L/usr/lib/x86_64-linux-gnu -lblas
-	  LINEAR_ALGEBRA =  -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -I"${MKLROOT}/include" -Wl,-rpath,${MKLROOT}/lib
-      IFORT_OPT = -O3 -axCORE-AVX512
+      LINEAR_ALGEBRA = -L/usr/lib/x86_64-linux-gnu -llapack -L/usr/lib/x86_64-linux-gnu -lblas
+endif
+ifeq ($(COMPUTER),RUBY)
+	  LINEAR_ALGEBRA = -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl -I"${MKLROOT}/include" -Wl,-rpath,${MKLROOT}/lib
+      IFORT_OPT = -O3 -xCORE-AVX2 -axCORE-AVX512 -fma 
 endif
 ifeq ($(COMPUTER),QUARTZ)
       VERSION_LIBRARY = mkl-2020.0
@@ -114,7 +116,7 @@ HFBTHO_EXE     = hfbtho_main
 HFBTHO_SOURCE  = hfbtho_main.f90
 HFBTHO_OBJ     = hfbtho_main.o
 
-# Defining compiler options for: IFORT FORTRAN COMPILER (ifort). 12/15/24 Note: when using ifx, use extend-source instead of extend_source
+# Defining compiler options for: IFORT FORTRAN COMPILER (ifort)
 ifeq ($(COMPILER),IFORT)
       FORMAT_F90   = -fPIC -free -extend-source
       PREPROCESSOR = -fpp -DUSE_OPENMP=$(USE_OPENMP) \
@@ -129,7 +131,7 @@ ifeq ($(COMPILER),IFORT)
                           -DUSE_QRPA=$(USE_QRPA) \
                           -DUSE_ESSL=$(USE_ESSL) $(FFLAGS)
       ifeq ($(DEBUG),FALSE)
-            OPTIONS = $(PREPROCESSOR) $(IFORT_OPT) #12/20/24: Add additional optimizations other than O3
+            OPTIONS = $(PREPROCESSOR) $(IFORT_OPT)
       else
             OPTIONS = $(PREPROCESSOR) -g -check all -warn nodeclarations -warn nounused
       endif

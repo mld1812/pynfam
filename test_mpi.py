@@ -1,5 +1,4 @@
-# hello_mpi.py:
-# usage: python hello_mpi.py
+#!/usr/bin/env python
 from mpi4py import MPI
 from mpi4py.futures import MPICommExecutor
 import numpy as np
@@ -63,6 +62,8 @@ comm_master = comm_world.Split(group, 1)
 
 new_comm_rank = comm_master.Get_rank()
 
+print(f"Hello from process {rank}, in split comm: {new_comm_rank}")
+"""
 if rank < 4: #Masters
     #Send some tasks to be done to the lead worker (comm_world rank 4)
     task_list = np.arange(rank, rank + 40)
@@ -101,6 +102,7 @@ else: #Workers
                             #Submit task to a worker
                             future = executor.submit(square_value, task)
                             future.add_done_callback(callback)
+"""
 """
 if __name__ == "__main__":
   #Try u sing MPICommExecutor.

@@ -4,7 +4,7 @@ from pynfam import pynfam_mpi_calc
 
 pynfam_inputs = {
  'directories': {
-     'outputs' : '150Sn_test_largeset_manyCPUs',
+     'outputs' : '150Sn_test3',
      'exes'    : './exes',
      'scratch' : './tests'
      },
@@ -23,7 +23,7 @@ pynfam_inputs = {
  'fam_mode': {
      'fam_contour': 'CIRCLE',
      'beta_type'  : '-',
-     'fam_ops'    : 'SPINDIPOLE' #('P', 0)
+     'fam_ops'    : 'All' #('P', 0)
      }
 }
 
@@ -81,7 +81,7 @@ override_settings = {
           #'override_cgs'        : '',
           #'override_cf'         : '',
  
- 	 #'two_body_current_mode': 141022, #No 2bc for now, do that later. digit 4: GT, digit 5: P, digit 6: PS0; 1 = 2bc, 2 = DME for P/PS0. 2nd digit controls GT: use 1 for full pnfam, 4 for DME
+ 	 #'two_body_current_mode': 111122, #No 2bc for now, do that later. digit 4: GT, digit 5: P, digit 6: PS0; 1 = 2bc, 2 = DME for P/PS0. 2nd digit controls GT: use 1 for full pnfam, 4 for DME
 		#'two_body_current_lecs': [-9.5886, 0, 0],
  	  #'max_iter' : 2
           #'two_body_current_usep': False,

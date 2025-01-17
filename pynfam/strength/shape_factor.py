@@ -9,7 +9,7 @@ from collections     import defaultdict
 #12/27/24: Scipy.integrate.trapz, simps, cumtrapz were deprecated in scipy 1.12
 import scipy
 scipy_version = scipy.__version__.split('.')
-if int(scipy_version[0]) == 1 and int(scipy__version[1]) < 12:
+if int(scipy_version[0]) == 1 and int(scipy_version[1]) < 12:
     from scipy.integrate import trapz, simps, cumtrapz
 else:
     #Import the new versions but call them trapz, simps, cumtrapz
@@ -682,91 +682,93 @@ class shapeFactor(phaseSpace):
         xm      = w0max/3.0 - ec*0.5*ALPHA*Zd/rad # I(1,1,1,1;r) ~ 3/2
         alphazed = ec*ALPHA*Zd/rad #11/29/24: Add this expression since we need to separate out the w0max/3 and Alpha*Zd/rad
 
+        #12/8/24: Use this variable to choose whether to use the new shape factors.
+        UseNewShapeFactors = True
         C = {term : {k : np.zeros(dim) for k in range(3)} for term in all_keys}
         for k in range(3):
             #--------------------------------------------------------------
             # Allowed terms (recall b[op][K-DNE] = 0)
             #--------------------------------------------------------------
             C[u'F'][k]  = b[u'F'][k]*ps[u'f2']
-            C[u'GT'][k] = LAM**2*b[u'GT'][k]*ps[u'f2']
+            C[u'GT'][k] = b[u'GT'][k]*ps[u'f2'] #Set gA=1 for fit, so no LAM**2 term.
 
             #if self.ffk_err[k]: continue #11/29/23: try removing these conditions. may lead to unphysical rates
             #--------------------------------------------------------------
             # J = 0 terms
             #--------------------------------------------------------------
-            #C[u'J0_R1'][k] = \
-            #        (-ec*2.0/3.0*LAM**2.0*(xp*b[u'RS0'][k] + b[u'RS0_PS0'][k]))*ps[u'f1']
-            #11/29/24: Updated expression with RS0I
-            C[u'J0_R1'][k] = \
-                    (-ec*2.0/3.0*LAM**2.0*(alphazed/3.0 * b[u'RS0I_RS0'][k]+w0max/3.0*b[u'RS0'][k]+b[u'RS0_PS0'][k]))*ps[u'f1']
-
-            #C[u'J0_R2'][k] = \
-            #        (LAM**2.0*((xp**2.0 + 1.0/9.0)*b[u'RS0'][k] +\
-            #        b[u'PS0'][k] + 2.0*xp*b[u'RS0_PS0'][k]))*ps[u'f2']
-            #11/29/24: Updated expression with RS0I
-            C[u'J0_R2'][k] = \
-                    (LAM**2.0*(b[u'PS0'][k] + b[u'RS0I'][k] * 1.0/9.0*alphazed**2.0 + b[u'RS0'][k] * w0max**2 / 9.0 +\
-                                2.0/9.0*alphazed*w0max*b[u'RS0I_RS0'][k] + 2.0/3.0*b[u'RS0I_PS0'][k]*alphazed + 2.0/3.0*b[u'RS0_PS0'][k]*w0max +\
-                                1.0/9.0*b[u'RS0'][k]))*ps[u'f2']
-            
-            #--------------------------------------------------------------
-            # J = 1 terms
-            #--------------------------------------------------------------
-            #C[u'J1_R1'][k] = \
-            #        (-2.0/9.0*(ec*xp*b[u'R'][k] - ec*2.0*LAM**2.0*xm*b[u'RS1'][k]\
-            #        + LAM*np.sqrt(2.0)*(xp-xm)*b[u'R_RS1'][k]\
-            #        - ec*np.sqrt(3.0)*b[u'R_P'][k] - LAM*np.sqrt(6.0)*b[u'P_RS1'][k]))*ps[u'f1']
-            #11/29/24: Updated expression with RS1I, RI. xp, xm in line 2 come from R, RS1.
-            C[u'J1_R1'][k] = \
-                    (-2.0/9.0*(ec*(w0max/3.0*b[u'R'][k] + alphazed/3.0*b[u'RI_R'][k]) - ec*2.0*LAM**2.0*(w0max/3.0*b[u'RS1'][k] - alphazed/3.0*b[u'RS1I_RS1'][k])\
-                    + LAM*np.sqrt(2.0)*alphazed/3.0*(b[u'RI_RS1'][k] + b[u'RS1I_R'][k])
+            if not UseNewShapeFactors:
+                C[u'J0_R1'][k] = \
+                        (-ec*2.0/3.0*LAM**2.0*(xp*b[u'RS0'][k] + b[u'RS0_PS0'][k]))*ps[u'f1']
+                C[u'J0_R2'][k] = \
+                    (LAM**2.0*((xp**2.0 + 1.0/9.0)*b[u'RS0'][k] +\
+                    b[u'PS0'][k] + 2.0*xp*b[u'RS0_PS0'][k]))*ps[u'f2']
+                C[u'J1_R1'][k] = \
+                    (-2.0/9.0*(ec*xp*b[u'R'][k] - ec*2.0*LAM**2.0*xm*b[u'RS1'][k]\
+                    + LAM*np.sqrt(2.0)*(xp-xm)*b[u'R_RS1'][k]\
                     - ec*np.sqrt(3.0)*b[u'R_P'][k] - LAM*np.sqrt(6.0)*b[u'P_RS1'][k]))*ps[u'f1']
-
-            """
-            C[u'J1_R2'][k] = \
+                C[u'J1_R2'][k] = \
                     (b[u'P'][k] +\
-                    1.0/3.0*xp**2.0*b[u'R'][k] +\
-                    2.0/3.0*LAM**2.0*xm**2.0*b[u'RS1'][k] +\
-                    1.0/27.0*(b[u'R'][k] + 2.0*LAM**2.0*b[u'RS1'][k] +\
-                            ec*2.0*np.sqrt(2.0)*LAM*b[u'R_RS1'][k]) +\
-                    np.sqrt(2.0/3.0)*(ec*2.0*LAM*xm*b[u'P_RS1'][k] - np.sqrt(2.0)*xp*b[u'R_P'][k] +\
-                            (-ec*2.0/np.sqrt(3.0)*LAM*xm*xp*b[u'R_RS1'][k])))*ps[u'f2']
-            if self.beta == u'c' and not ft_active:
-                C[u'J1_R2'][k] += -8.0/27.0*(LAM**2.0*b[u'RS1'][k] +\
-                        (ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]))*ps[u'f1']*ps[u'f3']
-            # Regular free coulomb fcts for b+, b-, ecft
-            else:
-                C[u'J1_R2'][k] += -8.0/27.0*(LAM**2.0*b[u'RS1'][k] +\
-                        (ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]))*mu1*gamma1*ps[u'f2']
-            """
-            #11/29/24: Updated expression with RS1I, RI
-            C[u'J1_R2'][k] = \
-                    (b[u'P'][k] +\
-                    1.0/3.0*(w0max**2/9.0 * b[u'R'][k] + alphazed**2/9.0 * b[u'RI'][k] + 2.0/9.0*alphazed*w0max*b[u'RI_R'][k]) +\
-                    2.0/3.0*LAM**2.0*(w0max**2/9.0 * b[u'RS1'][k] + alphazed**2/9.0 * b[u'RS1I'][k] - 2.0/9.0*alphazed*w0max*b[u'RS1I_RS1'][k]) +\
-                    1.0/27.0*(b[u'R'][k] + 2.0*LAM**2.0*b[u'RS1'][k] +\
-                            ec*2.0*np.sqrt(2.0)*LAM*b[u'R_RS1'][k]) +\
-                    np.sqrt(2.0/3.0)*(ec*2.0*LAM*(w0max/3.0*b[u'P_RS1'][k] - alphazed/3.0*b[u'RS1I_P'][k]) -\
-                            np.sqrt(2.0)*(w0max/3.0*b[u'R_P'][k] + alphazed/3.0*b[u'RI_P'][k]) +\
-                            (-ec*2.0/np.sqrt(3.0)*LAM*(w0max**2/9.0*b[u'R_RS1'][k] + w0max*alphazed/9.0*(b[u'RI_RS1'][k] - b[u'RS1I_R'][k]) -\
-                                                        alphazed**2/9.0*b[u'RI_RS1I'][k]))))*ps[u'f2']
-            if self.beta == u'c' and not ft_active:
-                C[u'J1_R2'][k] += -8.0/27.0*(LAM**2.0*b[u'RS1'][k] +\
-                        (ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]))*ps[u'f1']*ps[u'f3']
-            # Regular free coulomb fcts for b+, b-, ecft
-            else:
-                C[u'J1_R2'][k] += -8.0/27.0*(LAM**2.0*b[u'RS1'][k] +\
-                        (ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]))*mu1*gamma1*ps[u'f2']
-            
-            #C[u'J1_R3'][k] = \
-            #        (4.0/3.0*(np.sqrt(2.0)/3.0*LAM*xp*b[u'R_RS1'][k] +\
-            #        -ec*2.0/3.0*LAM**2.0*xm*b[u'RS1'][k] +\
-            #        -np.sqrt(2.0/3.0)*LAM*b[u'P_RS1'][k]))*ps[u'f3']
-            #11/29/24: Updated expression with RS1, R1. The first 'xp' comes from the O_r operator, the second 'xm' comes from the O_rs1. 
-            C[u'J1_R3'][k] = \
-                    (4.0/3.0*(np.sqrt(2.0)/3.0*LAM*(w0max/3.0*b[u'R_RS1'][k] + alphazed/3.0*b[u'RI_RS1'][k]) +\
-                    -ec*2.0/3.0*LAM**2.0*(w0max/3.0*b[u'RS1'][k] - alphazed/3.0*b[u'RS1I_RS1'][k]) +\
+                            1.0/3.0*xp**2.0*b[u'R'][k] +\
+                            2.0/3.0*LAM**2.0*xm**2.0*b[u'RS1'][k] +\
+                            1.0/27.0*(b[u'R'][k] + 2.0*LAM**2.0*b[u'RS1'][k] +\
+                                    ec*2.0*np.sqrt(2.0)*LAM*b[u'R_RS1'][k]) +\
+                            np.sqrt(2.0/3.0)*(ec*2.0*LAM*xm*b[u'P_RS1'][k] - np.sqrt(2.0)*xp*b[u'R_P'][k] +\
+                                    (-ec*2.0/np.sqrt(3.0)*LAM*xm*xp*b[u'R_RS1'][k])))*ps[u'f2']
+                if self.beta == u'c' and not ft_active:
+                    C[u'J1_R2'][k] += -8.0/27.0*(LAM**2.0*b[u'RS1'][k] +\
+                            (ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]))*ps[u'f1']*ps[u'f3']
+                # Regular free coulomb fcts for b+, b-, ecft
+                else:
+                    C[u'J1_R2'][k] += -8.0/27.0*(LAM**2.0*b[u'RS1'][k] +\
+                            (ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]))*mu1*gamma1*ps[u'f2']
+                C[u'J1_R3'][k] = \
+                    (4.0/3.0*(np.sqrt(2.0)/3.0*LAM*xp*b[u'R_RS1'][k] +\
+                    -ec*2.0/3.0*LAM**2.0*xm*b[u'RS1'][k] +\
                     -np.sqrt(2.0/3.0)*LAM*b[u'P_RS1'][k]))*ps[u'f3']
+            else:
+            #11/29/24: Updated expression with RS0I
+                C[u'J0_R1'][k] = \
+                        (-ec*2.0/3.0*LAM**2.0*(alphazed/3.0 * b[u'RS0I_RS0'][k]+w0max/3.0*b[u'RS0'][k]+b[u'RS0_PS0'][k]))*ps[u'f1']
+                #11/29/24: Updated expression with RS0I
+                C[u'J0_R2'][k] = \
+                        (LAM**2.0*(b[u'PS0'][k] + b[u'RS0I'][k] * 1.0/9.0*alphazed**2.0 + b[u'RS0'][k] * w0max**2 / 9.0 +\
+                                    2.0/9.0*alphazed*w0max*b[u'RS0I_RS0'][k] + 2.0/3.0*b[u'RS0I_PS0'][k]*alphazed + 2.0/3.0*b[u'RS0_PS0'][k]*w0max +\
+                                    1.0/9.0*b[u'RS0'][k]))*ps[u'f2']
+            
+                #--------------------------------------------------------------
+                # J = 1 terms
+                #--------------------------------------------------------------
+
+                #11/29/24: Updated expression with RS1I, RI. xp, xm in line 2 come from R, RS1.
+                C[u'J1_R1'][k] = \
+                        (-2.0/9.0*(ec*(w0max/3.0*b[u'R'][k] + alphazed/3.0*b[u'RI_R'][k]) - ec*2.0*LAM**2.0*(w0max/3.0*b[u'RS1'][k] - alphazed/3.0*b[u'RS1I_RS1'][k])\
+                        + LAM*np.sqrt(2.0)*alphazed/3.0*(b[u'RI_RS1'][k] + b[u'RS1I_R'][k])
+                        - ec*np.sqrt(3.0)*b[u'R_P'][k] - LAM*np.sqrt(6.0)*b[u'P_RS1'][k]))*ps[u'f1']
+
+                #11/29/24: Updated expression with RS1I, RI
+                C[u'J1_R2'][k] = \
+                        (b[u'P'][k] +\
+                        1.0/3.0*(w0max**2/9.0 * b[u'R'][k] + alphazed**2/9.0 * b[u'RI'][k] + 2.0/9.0*alphazed*w0max*b[u'RI_R'][k]) +\
+                        2.0/3.0*LAM**2.0*(w0max**2/9.0 * b[u'RS1'][k] + alphazed**2/9.0 * b[u'RS1I'][k] - 2.0/9.0*alphazed*w0max*b[u'RS1I_RS1'][k]) +\
+                        1.0/27.0*(b[u'R'][k] + 2.0*LAM**2.0*b[u'RS1'][k] +\
+                                ec*2.0*np.sqrt(2.0)*LAM*b[u'R_RS1'][k]) +\
+                        np.sqrt(2.0/3.0)*(ec*2.0*LAM*(w0max/3.0*b[u'P_RS1'][k] - alphazed/3.0*b[u'RS1I_P'][k]) -\
+                                np.sqrt(2.0)*(w0max/3.0*b[u'R_P'][k] + alphazed/3.0*b[u'RI_P'][k]) +\
+                                (-ec*2.0/np.sqrt(3.0)*LAM*(w0max**2/9.0*b[u'R_RS1'][k] + w0max*alphazed/9.0*(b[u'RI_RS1'][k] - b[u'RS1I_R'][k]) -\
+                                                            alphazed**2/9.0*b[u'RI_RS1I'][k]))))*ps[u'f2']
+                if self.beta == u'c' and not ft_active:
+                    C[u'J1_R2'][k] += -8.0/27.0*(LAM**2.0*b[u'RS1'][k] +\
+                            (ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]))*ps[u'f1']*ps[u'f3']
+                # Regular free coulomb fcts for b+, b-, ecft
+                else:
+                    C[u'J1_R2'][k] += -8.0/27.0*(LAM**2.0*b[u'RS1'][k] +\
+                            (ec*LAM/np.sqrt(2.0)*b[u'R_RS1'][k]))*mu1*gamma1*ps[u'f2']
+
+                #11/29/24: Updated expression with RS1, R1. The first 'xp' comes from the O_r operator, the second 'xm' comes from the O_rs1. 
+                C[u'J1_R3'][k] = \
+                        (4.0/3.0*(np.sqrt(2.0)/3.0*LAM*(w0max/3.0*b[u'R_RS1'][k] + alphazed/3.0*b[u'RI_RS1'][k]) +\
+                        -ec*2.0/3.0*LAM**2.0*(w0max/3.0*b[u'RS1'][k] - alphazed/3.0*b[u'RS1I_RS1'][k]) +\
+                        -np.sqrt(2.0/3.0)*LAM*b[u'P_RS1'][k]))*ps[u'f3']
 
             C[u'J1_R4'][k] = \
                     (8.0/27.0*LAM**2.0*b[u'RS1'][k])*ps[u'f4']

@@ -67,7 +67,7 @@ def pynfam_mpi_calc(pynfam_inputs, override_settings, check=False):
         if inp_err: mu.pynfam_abort(comm, inp_err)
 
     # Setup MPI related parameters, split comm into master/worker.
-    inp_err, mpi_wrn, newcomm, group, stdout = wu.pynfam_mpi_init(pynfam_inputs, nr_calcs, comm, check)
+    inp_err, mpi_wrn, comm_mw, comm_ae, group, stdout = wu.pynfam_mpi_init(pynfam_inputs, nr_calcs, comm, check)
     if rank == 0:
         if inp_err and not check: mu.pynfam_abort(comm, inp_err)
         if mpi_wrn: mu.pynfam_warn(mpi_wrn)
@@ -86,24 +86,19 @@ def pynfam_mpi_calc(pynfam_inputs, override_settings, check=False):
     if group == 0:
         kwargs = {u'pynfam_inputs': pynfam_inputs,
                   u'override_settings': override_settings,
-                  u'comm': comm,
+                  u'comm': comm_ae,
                   u'do_fam': do_fam,
                   u'stdout': stdout,
                   u'exst_data': exst_data
                   }
-        rank, nr_masters = mu.pynfam_mpi_traits(newcomm)
-        icalc = rank
-        while True:
-            if icalc > nr_calcs - 1: break
-            index = icalc
-            icalc += nr_masters
-            kwargs.update({u'index': index})
-            pynfam_dripline_calc(**kwargs)
+        rank, nr_masters = mu.pynfam_mpi_traits(comm_mw)
+        for icalc in range(rank, nr_calcs, nr_masters):
+            pynfam_dripline_calc(**kwargs, index=icalc)
 
-        if do_mpi: mu.runtasks_killsignal(comm, newcomm) # Barrier
+        if do_mpi: mu.runtasks_killsignal(comm_ae, comm_mw) # Barrier
     # All else are workers. They don't know anything, just run tasks
     else:
-        mu.runtasks_worker(comm, newcomm, stdout)
+        mu.runtasks_worker(comm_ae, comm_mw, stdout)
 
     if do_mpi: comm.Barrier()
     if rank==0: wu.pynfam_finalize(pynfam_inputs)
@@ -134,7 +129,7 @@ def pynfam_mpi_calc_tbc(pynfam_inputs, override_settings, check=False):
         if inp_err: mu.pynfam_abort(comm, inp_err)
 
     # Setup MPI related parameters, split comm into master/worker.
-    inp_err, mpi_wrn, newcomm, group, stdout = wu.pynfam_mpi_init_2bconly(pynfam_inputs, nr_calcs, comm, check)
+    inp_err, mpi_wrn, comm_mw, comm_ae, group, stdout = wu.pynfam_mpi_init_2bconly(pynfam_inputs, nr_calcs, comm, check)
     if rank == 0:
         if inp_err and not check: mu.pynfam_abort(comm, inp_err)
         if mpi_wrn: mu.pynfam_warn(mpi_wrn)
@@ -168,11 +163,11 @@ def pynfam_mpi_calc_tbc(pynfam_inputs, override_settings, check=False):
             fam_ops_list.append(fam_ops)
             setts_list.append(setts)
         #run initialize fam 2bc.
-        initialize_fam_2bc_all(comm, mgr_list, fam_ops_list, setts_list, stdout)
-        if do_mpi: mu.runtasks_killsignal(comm, newcomm) # Barrier
+        initialize_fam_2bc_all(comm_ae, mgr_list, fam_ops_list, setts_list, stdout)
+        if do_mpi: mu.runtasks_killsignal(comm_ae, comm_mw) # Barrier
     # All else are workers. They don't know anything, just run tasks
     else:
-        mu.runtasks_worker(comm, newcomm, stdout)
+        mu.runtasks_worker(comm_ae, comm_mw, stdout)
     if do_mpi: comm.Barrier()
 
 # ------------------------------------------------------------------------------
@@ -277,7 +272,7 @@ def pynfam_calc(index, index2, pynfam_inputs, override_settings, comm, do_fam, s
     even_fin, odd_fin = hfb_evens[1], hfb_odds[1]
 
     if hfb_gs is None:
-        even_fin = run_hfb_even_calc(comm, mgr, ignore_nc, stdout, *hfb_evens)
+        even_fin = run_hfb_even_calc(comm, mgr, ignore_nc, stdout, index, *hfb_evens)
         if even_fin is None: return
 
         # We need the 0T gs for FT calcs logfiles. If no viable gs, end calc
@@ -285,7 +280,7 @@ def pynfam_calc(index, index2, pynfam_inputs, override_settings, comm, do_fam, s
             hfb_gs_0T = finalize_hfb_gs(mgr, ignore_nc, hfb_main, odd_fin=even_fin, even_fin=[])
             if hfb_gs_0T is None: return
 
-        odd_fin = run_hfb_odd_calc(comm, mgr, ignore_nc, stdout,
+        odd_fin = run_hfb_odd_calc(comm, mgr, ignore_nc, stdout, index,
                 gs_def_scan, hfb_main, even_fin, *hfb_odds)
         if odd_fin is None: return
 
@@ -296,7 +291,7 @@ def pynfam_calc(index, index2, pynfam_inputs, override_settings, comm, do_fam, s
 
     nshells = hfb_gs.nml[u'HFBTHO_GENERAL'][u'number_of_shells']
 
-    err = initialize_fam_2bc(comm, mgr, fam_ops, setts, rerun, stdout, nshells)
+    err = initialize_fam_2bc(comm, mgr, fam_ops, setts, rerun, stdout, index, nshells)
     if rerun == 2 or err:
         if not err:
             msg = u"Rerun mode for 2BC calculation requested. Exiting after 2BC calc."
@@ -316,7 +311,7 @@ def pynfam_calc(index, index2, pynfam_inputs, override_settings, comm, do_fam, s
 
     contour_set, fam_pts = initialize_fam_calc(mgr, setts, fam_ops, ctr_main, hfb_gs)
 
-    all_fam_fin = run_fam_calc(comm, mgr, stdout, *fam_pts)
+    all_fam_fin = run_fam_calc(comm, mgr, stdout, index, *fam_pts)
     if all_fam_fin is None: return hfb_gs
 
     finalize_fam_calc(mgr, contour_set, all_fam_fin)

@@ -98,7 +98,7 @@ module pnfam_extfield
        !   - 2 body currents: Add additional blockmatrix for pairing field
        !   - 1 body GT is (f11, 0; 0, 0), GT2BC has (f11, f12; -f12*, -f11*)
        call init_fam_mapping(op)
-       if (op%use_2bc(3) > 1 .and. op%use_2bc(4) /= 0) then ! Delta needed if 2 or 3
+       if (op%use_2bc(3) > 1 .and. op%label == 'GT') then ! Delta needed if 2 or 3
           call allocate_blockmatrix(op%mat12, size(op%mat%elem))
           call copy_block_structure(op%mat, op%mat12)
        end if
@@ -155,7 +155,7 @@ module pnfam_extfield
  
        ! Compute contact term (sigma tau rho) and/or NM+LDA (sigma tau F(rho))
        rho_fac = 1.0_dp
-       if (op%use_2bc(2) /= 0 .and. op%use_2bc(4) /= 0 .and. label == 'GT') then !11/5/23: only work this out if we're looking at GT operator.
+       if (op%use_2bc(2) /= 0 .and. label == 'GT') then !11/5/23: only work this out if we're looking at GT operator.
           call init_extfield_2bc_type(.false.)
           rho_fac = 0; rhon = 0; rhop = 0
           call hfb_density_coord(IT_NEUTRON,rhon)
@@ -186,10 +186,9 @@ module pnfam_extfield
        end if
 
        ! 3/7/24 Need to call init_extfield_2bc_type to initialize those variables when label = rsL and two body current mode is active
-       if (op%use_2bc(4) >= 2 .and. (label == 'RS0' .or. label == 'RS1' .or. label == 'RS2' .or. label == 'RS0I' .or. label == 'RS1I')) then
-         !8/21/24 If use_2bc(4) = 3, then use asymmetric nuclear matter for RSL calcs.
+       if (op%use_2bc(6) > 0 .and. (label == 'RS0' .or. label == 'RS1' .or. label == 'RS2' .or. label == 'RS0I' .or. label == 'RS1I')) then
          rsL_snm = .true.
-         if (op%use_2bc(4) == 3) then
+         if (op%use_2bc(6) == 2) then
              rsL_snm = .false.
          endif
           call init_extfield_2bc_type(.false.)
@@ -198,15 +197,15 @@ module pnfam_extfield
        end if
        !12/4/24 Calling forbidden 2bc functions just once instead of multiple times.
        if (label == 'P') then
-        if (op%use_2bc(5) == 1) then
+        if (op%use_2bc(4) == 1) then
             correction_2bc_vector = forbidden_2bc_P()
-        else if (op%use_2bc(5) == 2) then
+        else if (op%use_2bc(4) == 2) then
             correction_2bc_vector = dme_vector()
         endif
        else if (label == 'PS0') then
-        if (op%use_2bc(6) == 1) then
+        if (op%use_2bc(5) == 1) then
             correction_2bc_axial_charge = forbidden_2bc_PS0()
-        else if (op%use_2bc(6) == 2) then
+        else if (op%use_2bc(5) == 2) then
             correction_2bc_axial_charge = dme_axial_2()
         endif
        endif
@@ -362,7 +361,7 @@ module pnfam_extfield
                       select case (K)
                          case (0)
                             if ((xl1 == xl2) .and. (xs1 == xs2)) then
-                               if (op%use_2bc(1) == 0 .or. op%use_2bc(5) == 0) then !just 1 body.
+                               if (op%use_2bc(1) == 0 .or. op%use_2bc(4) == 0) then !just 1 body.
                                   op%mat%elem(ipt) = -dot_product(wf_1(:), dz_wf_2(:)) !derivative of wavefunction 2 in z direction.
                                else if (op%use_2bc(1) == 1) then !1 body and 2 body.
                                   op%mat%elem(ipt) = -dot_product(wf_1(:) * (1 + correction_2bc_vector(:)), dz_wf_2(:)) 
@@ -372,7 +371,7 @@ module pnfam_extfield
                             end if
                          case (1,-1)
                             if ((xl1 == xl2 + K) .and. (xs1 == xs2)) then
-                               if (op%use_2bc(1) == 0 .or. op%use_2bc(5) == 0) then !just 1 body.
+                               if (op%use_2bc(1) == 0 .or. op%use_2bc(4) == 0) then !just 1 body.
                                   op%mat%elem(ipt) = K/sqrt(2.0_dp) * (dot_product(wf_1(:), dr_wf_2(:))   &
                                   - K*xl2 * dot_product(wf_1(:), y(:)*wf_2(:))) !radial and angular components of gradient. y corresponds to 1/r. 
                                else if (op%use_2bc(1) == 1) then !1 body and 2 body.
@@ -390,19 +389,19 @@ module pnfam_extfield
                    ! ------------------------------
                    case ('RS0')
                       if ((xl1 == xl2) .and. (xs1 == xs2)) then
-                         if (op%use_2bc(4) >= 2) then 
+                         if (op%use_2bc(6) > 0) then 
                             op%mat%elem(ipt) = -xs1*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), z(:)*wf_2(:))
                          else
                             op%mat%elem(ipt) = -xs1*dot_product(wf_1(:), z(:)*wf_2(:))
                          end if
                       else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
-                         if (op%use_2bc(4) >= 2) then 
+                         if (op%use_2bc(6) > 0) then 
                             op%mat%elem(ipt) = -dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                          else
                             op%mat%elem(ipt) = -dot_product(wf_1(:), r(:)*wf_2(:))
                          end if
                       else if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
-                         if (op%use_2bc(4) >= 2) then 
+                         if (op%use_2bc(6) > 0) then 
                             op%mat%elem(ipt) = -dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                          else
                             op%mat%elem(ipt) = -dot_product(wf_1(:), r(:)*wf_2(:))
@@ -411,19 +410,19 @@ module pnfam_extfield
  
                     case ('RS0I') !RS0 with I(1,1,1,1) function. Element-multiply the I function.
                         if ((xl1 == xl2) .and. (xs1 == xs2)) then
-                           if (op%use_2bc(4) >= 2) then 
+                           if (op%use_2bc(6) > 0) then 
                               op%mat%elem(ipt) = -xs1*dot_product(I_func(:) * wf_1(:) * (1.0_dp - correction_2bc_rsL), z(:)*wf_2(:))
                            else
                               op%mat%elem(ipt) = -xs1*dot_product(I_func(:) * wf_1(:), z(:)*wf_2(:))
                            end if
                         else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
-                           if (op%use_2bc(4) >= 2) then 
+                           if (op%use_2bc(6) > 0) then 
                               op%mat%elem(ipt) = -dot_product(I_func(:) * wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                            else
                               op%mat%elem(ipt) = -dot_product(I_func(:) * wf_1(:), r(:)*wf_2(:))
                            end if
                         else if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
-                           if (op%use_2bc(4) >= 2) then 
+                           if (op%use_2bc(6) > 0) then 
                               op%mat%elem(ipt) = -dot_product(I_func(:) * wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                            else
                               op%mat%elem(ipt) = -dot_product(I_func(:) * wf_1(:), r(:)*wf_2(:))
@@ -436,13 +435,13 @@ module pnfam_extfield
                       select case (K)
                          case (0)
                             if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
-                               if (op%use_2bc(4) >= 2) then
+                               if (op%use_2bc(6) > 0) then
                                   op%mat%elem(ipt) = sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:),r(:)*wf_2(:))
                                end if
                             else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
-                               if (op%use_2bc(4) >= 2) then
+                               if (op%use_2bc(6) > 0) then
                                   op%mat%elem(ipt) = -sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:)* (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = -sqrt(3.0_dp/2.0_dp)*dot_product(wf_1(:),r(:)*wf_2(:))
@@ -450,13 +449,13 @@ module pnfam_extfield
                             end if
                          case (1,-1)
                             if ((xl1 == xl2) .and. (xs1 == xs2 + 2*K)) then
-                               if (op%use_2bc(4) >= 2) then
+                               if (op%use_2bc(6) > 0) then
                                   op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:)* (1.0_dp - correction_2bc_rsL),z(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:), z(:)*wf_2(:))
                                end if
                             else if ((xl1 == xl2 + K) .and. (xs1 == xs2)) then
-                               if (op%use_2bc(4) >= 2) then
+                               if (op%use_2bc(6) > 0) then
                                   op%mat%elem(ipt) = -xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:)* (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = -xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:), r(:)*wf_2(:))
@@ -468,13 +467,13 @@ module pnfam_extfield
                         select case (K)
                            case (0)
                               if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
-                                 if (op%use_2bc(4) >= 2) then
+                                 if (op%use_2bc(6) > 0) then
                                     op%mat%elem(ipt) = sqrt(3.0_dp/2.0_dp)*dot_product(I_func(:) * wf_1(:) * (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
                                  else
                                     op%mat%elem(ipt) = sqrt(3.0_dp/2.0_dp)*dot_product(I_func(:) * wf_1(:),r(:)*wf_2(:))
                                  end if
                               else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
-                                 if (op%use_2bc(4) >= 2) then
+                                 if (op%use_2bc(6) > 0) then
                                     op%mat%elem(ipt) = -sqrt(3.0_dp/2.0_dp)*dot_product(I_func(:) * wf_1(:)* (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
                                  else
                                     op%mat%elem(ipt) = -sqrt(3.0_dp/2.0_dp)*dot_product(I_func(:) * wf_1(:),r(:)*wf_2(:))
@@ -482,13 +481,13 @@ module pnfam_extfield
                               end if
                            case (1,-1)
                               if ((xl1 == xl2) .and. (xs1 == xs2 + 2*K)) then
-                                 if (op%use_2bc(4) >= 2) then
+                                 if (op%use_2bc(6) > 0) then
                                     op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(I_func(:) * wf_1(:)* (1.0_dp - correction_2bc_rsL),z(:)*wf_2(:))
                                  else
                                     op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(I_func(:) * wf_1(:), z(:)*wf_2(:))
                                  end if
                               else if ((xl1 == xl2 + K) .and. (xs1 == xs2)) then
-                                 if (op%use_2bc(4) >= 2) then
+                                 if (op%use_2bc(6) > 0) then
                                     op%mat%elem(ipt) = -xs1*sqrt(3.0_dp)/2.0_dp*dot_product(I_func(:) * wf_1(:)* (1.0_dp - correction_2bc_rsL),r(:)*wf_2(:))
                                  else
                                     op%mat%elem(ipt) = -xs1*sqrt(3.0_dp)/2.0_dp*dot_product(I_func(:) * wf_1(:), r(:)*wf_2(:))
@@ -502,19 +501,19 @@ module pnfam_extfield
                       select case (K)
                          case (0)
                             if ((xl1 == xl2) .and. (xs1 == xs2)) then
-                               if (op%use_2bc(4) >= 2) then
+                               if (op%use_2bc(6) > 0) then
                                   op%mat%elem(ipt) = xs1*sqrt(2.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), z(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = xs1*sqrt(2.0_dp)*dot_product(wf_1(:), z(:)*wf_2(:))
                                end if 
                             else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
-                               if (op%use_2bc(4) >= 2) then
+                               if (op%use_2bc(6) > 0) then
                                   op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:), r(:)*wf_2(:))
                                end if 
                             else if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
-                               if (op%use_2bc(4) >= 2) then
+                               if (op%use_2bc(6) > 0) then
                                   op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = -1/sqrt(2.0_dp)*dot_product(wf_1(:), r(:)*wf_2(:))
@@ -522,13 +521,13 @@ module pnfam_extfield
                             end if
                          case (1,-1)
                             if ((xl1 == xl2) .and. (xs1 == xs2 + 2*K)) then
-                               if (op%use_2bc(4) >= 2) then
+                               if (op%use_2bc(6) > 0) then
                                   op%mat%elem(ipt) = -K*sqrt(3.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), z(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = -K*sqrt(3.0_dp)*dot_product(wf_1(:), z(:)*wf_2(:))
                                end if
                             else if ((xl1 == xl2 + K) .and. (xs1 == xs2)) then
-                               if (op%use_2bc(4) >= 2) then
+                               if (op%use_2bc(6) > 0) then
                                   op%mat%elem(ipt) = -K*xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = -K*xs1*sqrt(3.0_dp)/2.0_dp*dot_product(wf_1(:), r(:)*wf_2(:))
@@ -536,7 +535,7 @@ module pnfam_extfield
                             end if
                          case (2,-2)
                             if ((xl1 == xl2 + K/2) .and. (xs1 == xs2 + K)) then
-                               if (op%use_2bc(4) >= 2) then
+                               if (op%use_2bc(6) > 0) then
                                   op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:) * (1.0_dp - correction_2bc_rsL), r(:)*wf_2(:))
                                else
                                   op%mat%elem(ipt) = sqrt(3.0_dp)*dot_product(wf_1(:), r(:)*wf_2(:))
@@ -549,7 +548,7 @@ module pnfam_extfield
                       ! ----------------------------------------
                       case ('PS0')
                          if ((xl1 == xl2) .and. (xs1 == xs2)) then
-                            if (op%use_2bc(1) == 0 .or. op%use_2bc(6) == 0) then !just one body
+                            if (op%use_2bc(1) == 0 .or. op%use_2bc(5) == 0) then !just one body
                                op%mat%elem(ipt) = -xs1*dot_product(wf_1(:), dz_wf_2(:))
                             else if (op%use_2bc(1) == 1) then !1bc + 2bc
                                op%mat%elem(ipt) = -xs1*dot_product(wf_1(:) * (1 + correction_2bc_axial_charge(:)), dz_wf_2(:))
@@ -557,7 +556,7 @@ module pnfam_extfield
                                op%mat%elem(ipt) = -xs1*dot_product(wf_1(:) * correction_2bc_axial_charge(:), dz_wf_2(:))
                             end if
                          else if ((xl1 == xl2 - 1) .and. (xs1 == xs2 + 2)) then
-                            if (op%use_2bc(1) == 0 .or. op%use_2bc(6) == 0) then !just one body
+                            if (op%use_2bc(1) == 0 .or. op%use_2bc(5) == 0) then !just one body
                                op%mat%elem(ipt) = -dot_product(wf_1(:), dr_wf_2(:))      &
                                    - xl2*dot_product(wf_1(:), y(:)*wf_2(:))
                             else if (op%use_2bc(1) == 1) then !1bc + 2bc
@@ -568,7 +567,7 @@ module pnfam_extfield
                                - xl2*dot_product(wf_1(:) * correction_2bc_axial_charge, y(:)*wf_2(:))
                             end if
                          else if ((xl1 == xl2 + 1) .and. (xs1 == xs2 - 2)) then
-                            if (op%use_2bc(1) == 0 .or. op%use_2bc(6) == 0) then !just one body
+                            if (op%use_2bc(1) == 0 .or. op%use_2bc(5) == 0) then !just one body
                                op%mat%elem(ipt) = -dot_product(wf_1(:), dr_wf_2(:))      &
                                    + xl2*dot_product(wf_1(:), y(:)*wf_2(:))
                             else if (op%use_2bc(1) == 1) then !1bc + 2bc
@@ -667,9 +666,9 @@ module pnfam_extfield
        i1 = get_digit(use_2bc, 5) ! 1=1+2Body, 2=2Body only 
        i2 = get_digit(use_2bc, 4) ! 1=Full Fam, 2=SNM+LDA, 3=ASNM+LDA
        i3 = get_digit(use_2bc, 3) ! 1=Gamma, 2=Delta, 3=Gamma+Delta
-       i4 = get_digit(use_2bc, 2) ! if >0, then 2bc GT current is active
-       i5 = get_digit(use_2bc, 1) ! if >0, then 2bc P current is active
-       i6 = get_digit(use_2bc, 0) ! if >0, then 2bc PS0 current is active
+       i4 = get_digit(use_2bc, 2) ! if >0, then 2bc P current is active
+       i5 = get_digit(use_2bc, 1) ! if >0, then 2bc PS0 current is active
+       i6 = get_digit(use_2bc, 0) ! if >0, then 2bc RS0, RS1, RS2 (Spin-Dipole) currents are active
  
        op%use_2bc(1) = i1
        op%use_2bc(2) = i2
@@ -677,8 +676,8 @@ module pnfam_extfield
        op%use_2bc(4) = i4
        op%use_2bc(5) = i5
        op%use_2bc(6) = i6
-       ! Check valid digits
-       if ((i1 < 1 .or. i1 > 2) .or. (i2 < 1 .or. i2 > 5) .or. (i3 < 1 .or. i3 > 3)) then
+       ! Check valid digits. i2 can be equal to 0 (no GT 2bc)
+       if ((i1 < 1 .or. i1 > 2) .or. (i2 < 0 .or. i2 > 5) .or. (i3 < 1 .or. i3 > 3)) then
           ierr = 1
        ! Check valid combos: NM+LDA (i1=2,3) has only Gamma (i3=1) ... and DME?
        else if (i1 /= 1 .and. i3 /= 1) then
