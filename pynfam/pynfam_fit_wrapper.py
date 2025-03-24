@@ -1318,7 +1318,7 @@ def pynfam_fit_wrapper_root(input_data, categories, override_setts_fit, override
             conv_info.extend((False,)*len(data))
             maxsi_info.extend((np.nan,)*len(data))
         else:
-            log_df = pd.read_csv(log_path, delim_whitespace=True, header=0, comment=u'#', index_col=0)
+            log_df = pd.read_csv(log_path, sep=r'\s+', header=0, comment=u'#', index_col=0)
             HFB_Conv = (log_df['HFB_Conv'] == 'Yes')
             FAM_Conv = (log_df['FAM_Conv'] == 'Yes') if 'FAM_Conv' in log_df.columns else True
             Both_Conv = (HFB_Conv & FAM_Conv)

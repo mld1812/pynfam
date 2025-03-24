@@ -12,6 +12,10 @@ import copy
 __version__ = u'2.0.0'
 __date__    = u'2019-07-26'
 
+pandas_version = pd.__version__.split('.')
+if int(pandas_version[0]) >= 2 and int(pandas_version[1]) >= 2:
+    pd.set_option('future.no_silent_downcasting', True) # In pandas 2.2, we need to set this to silence warning for fillna
+
 #===============================================================================#
 #                             CLASS lsLogger                                    #
 #===============================================================================#
@@ -56,8 +60,7 @@ class lsLogger(object):
             float_format = None
 
         # Replace None with np.nan
-        #12/18/24: Use this to ignore the warning that pandas throws.
-        frame.infer_objects().fillna(value=np.nan, inplace=True)
+        frame.fillna(value=np.nan, inplace=True)
         # Pandas automatically truncates strings at 50 chars, as of now
         # the way to fix this is through the display options.
         pd.set_option('display.max_colwidth', 100)

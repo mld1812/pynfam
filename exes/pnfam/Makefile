@@ -39,7 +39,7 @@ COMPILER = ifx
 
 VERBOSE   = 0
 DEBUG     = FALSE
-USE_OPENMP= 0
+USE_OPENMP= 1
 # Turn above on with two-body currents
 
 USE_HBLAS = 1
@@ -48,8 +48,8 @@ READ_FUNCTIONAL = 0
 # Library (L) and header/mod files (I)
 #L_LINEARALGEBRA = -L/usr/lib/x86_64-linux-gnu -lblas -llapack
 #12/20/24: For dogwood/sycamore, use MKL
-L_LINEARALGEBRA = -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -I"${MKLROOT}/include" -Wl,-rpath,${MKLROOT}/lib
-IFORT_OPT = -O3 -axCORE-AVX512 
+L_LINEARALGEBRA = -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl -I"${MKLROOT}/include" -Wl,-rpath,${MKLROOT}/lib
+IFORT_OPT = -O3 -axCORE-AVX512 -fma
  # LINEAR_ALGEBRA =  -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -I${MKLROOT}/include
 
 #L_HFBTHO = -L../hfbtho_gitlab/src/hfbtho -lhfbtho

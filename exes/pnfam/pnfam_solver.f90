@@ -590,7 +590,7 @@ contains
       if (two_body_current_mode /= 0 .and. operator_name == 'GT') then
          ! Set the 2BC part of the external field type
          call set_use_2bc(f, two_body_current_mode)
-         if (f%use_2bc(4) == 0) return !not calculating 2bc for the GT operator.
+         if (f%use_2bc(2) == 0) return !not calculating 2bc for the GT operator.
          ! Store the 1-body part (if doing 1BC+2BC)
          if (allocated(elem_tmp)) deallocate(elem_tmp)
          allocate(elem_tmp(size(f%mat%elem)))

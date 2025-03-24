@@ -21,7 +21,7 @@ DOCUMENTATION = FALSE
 #   - USE_OPENMP ...........: enables OpenMP multithreading
 #   - USE_PETSC ............: uses Petsc library for ...
 USE_ESSL   = 0
-USE_OPENMP = 0
+USE_OPENMP = 1
 USE_PETSC  = 0
 # Physics options
 #   - USE_MPI .............: 1, ANL optimization
@@ -58,8 +58,8 @@ USE_QRPA         = 0
 IFORT_OPT = -O3
 ifeq ($(COMPUTER),DESKTOP)
       #LINEAR_ALGEBRA = -L/usr/lib/x86_64-linux-gnu -llapack -L/usr/lib/x86_64-linux-gnu -lblas
-	  LINEAR_ALGEBRA =  -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl -I"${MKLROOT}/include" -Wl,-rpath,${MKLROOT}/lib
-      IFORT_OPT = -O3 -axCORE-AVX512
+      LINEAR_ALGEBRA =  -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl -I"${MKLROOT}/include" -Wl,-rpath,${MKLROOT}/lib
+      IFORT_OPT = -O3 -axCORE-AVX512 -fma
 endif
 ifeq ($(COMPUTER),QUARTZ)
       VERSION_LIBRARY = mkl-2020.0

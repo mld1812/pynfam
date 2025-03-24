@@ -8,3 +8,7 @@ __pycache__/
 tests/
 fit_tests2/
 fit_examples/
+/*.sh
+pnfam_main.x
+hfbtho_main
+libhfbtho.a

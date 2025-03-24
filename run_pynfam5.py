@@ -4,7 +4,7 @@ from pynfam import pynfam_mpi_calc
 
 pynfam_inputs = {
  'directories': {
-     'outputs' : '150Sn_test_largeset_manyCPUs',
+     'outputs' : '84Se_test_intel2',
      'exes'    : './exes',
      'scratch' : './tests'
      },
@@ -14,7 +14,7 @@ pynfam_inputs = {
  'rerun_mode': 0,
 
  'hfb_mode': {
-     'gs_def_scan'    :  (-2, (-0.4,-0.3,-0.2,-0.1,0,0.1,0.2,0.3,0.4)), #(-2, (-0.2, 0, 0.2)), #(0, ()), #+1, (0.14,)
+     'gs_def_scan'    :  (-2, (-0.2,0,0.2)), #(-2, (-0.2, 0, 0.2)), #(0, ()), #+1, (0.14,)
      'dripline_mode'  : 0,
      'ignore_nonconv' : 0,
      #'retry_nonconv': True,
@@ -23,13 +23,13 @@ pynfam_inputs = {
  'fam_mode': {
      'fam_contour': 'CIRCLE',
      'beta_type'  : '-',
-     'fam_ops'    : 'SPINDIPOLE' #('P', 0)
+     'fam_ops'    : 'Forbidden' #('P', 0)
      }
 }
 
 override_settings = {
- 'hfb' : {'proton_number'    : 50, #64, 98 - Gd162
-          'neutron_number'   : 100,
+ 'hfb' : {'proton_number'    : 34, #64, 98 - Gd162
+          'neutron_number'   : 50,
           'number_of_shells' : 16, 
           #'number_gauss'     : 20,
           #'number_laguerre'  : 20,
@@ -81,7 +81,7 @@ override_settings = {
           #'override_cgs'        : '',
           #'override_cf'         : '',
  
- 	 #'two_body_current_mode': 141022, #No 2bc for now, do that later. digit 4: GT, digit 5: P, digit 6: PS0; 1 = 2bc, 2 = DME for P/PS0. 2nd digit controls GT: use 1 for full pnfam, 4 for DME
+ 	 #'two_body_current_mode': 141222, #DME and spin-dipole. digit 4: GT, digit 5: P, digit 6: PS0; 1 = 2bc, 2 = DME for P/PS0. 2nd digit controls GT: use 1 for full pnfam, 4 for DME
 		#'two_body_current_lecs': [-9.5886, 0, 0],
  	  #'max_iter' : 2
           #'two_body_current_usep': False,

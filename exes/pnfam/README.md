@@ -103,12 +103,13 @@ A single command line argument is accepted for files named differently.
 - *two_body_current_mode*: Integer, 3 digits indicating treatment of two body weak currents.
   Nuclear matter LDA approximations do not include pairing, so the only non-valid combination
   of the digits below is if 2nd digit is not 1, the 3rd digit cannot be 2 or 3.
-    + To not use two body currents at all, supply a value of 0, otherwise supply a 6 digit integer.
+    + To not use two body currents at all, supply a value of 0, otherwise supply a 7 digit integer.
     + 1st digit: 1=1BC+2BC, 2=2BC only
     + 2nd digit: 1=Full pnFAM 2BC, 2=SNM+LDA 2BC, 3=ASNM+LDA 2BC, 4=DME(exc), 5=DME(exc)+FAM(dir)
     + 3rd digit: 1=No pairing (Gamma only), 2=Pairing only (Delta only), 3=Gamma and Delta
-    + 4th, 5th, 6th digits: Determines which terms to use (4th: GT, 5th: P (vector), 6th: PS0 (axial charge))
-    + For the 4th digit: 1 for 2-body GT, 2 for 2-body GT + spin-dipole, 3 for asymmetric spin-dipole. 5th and 6th digits: 1 for 2-body fermi gas, 2 for DME.
+    + 4th, 5th, 6th digits: Determines which terms to use (4th: P (vector), 5th: PS0 (axial charge), 6th: RS0, RS1, RS2 (spin-dipole))
+    + For the 4th digit and 5th digits: 1 for 2-body fermi gas, 2 for DME.
+    + For the 6th digit: 1 for SNM, 2 for ASNM
 - *two_body_current_usep*: Boolean, if true uses P-terms in 2BC
 - *two_body_current_lecs*: Real, three values defining the low energy couplings c3, c4, cd.
   The LECs supplied should be dimensionless as in PRC 67 055206 (2003) Eq.12. cd = d1 + 2\*d2.
