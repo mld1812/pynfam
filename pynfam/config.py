@@ -106,7 +106,8 @@ DEFAULTS = {
 
     u'fam': OD([
         (u'GENERAL', OD([
-            (u'use_fam_storage'     , 0)
+            (u'use_fam_storage'     , 0),
+            (u'write_amplitudes', False)
             ])),
         (u'EXT_FIELD', OD([
             (u'compute_crossterms'  , True),
@@ -205,6 +206,7 @@ DEFAULTS = {
             (u'Q_eff_mode' , 0),
             (u'GA'         , -1.27),
             (u'GV'         , 1.0),
+            (u'UseNewShapeFactors', False),
             (u'log(pYe)'   , 9)
             ])),
         (u'RATINT', OD([

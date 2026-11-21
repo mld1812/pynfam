@@ -13,7 +13,15 @@ module pnfam_extfield
     private
  
     integer,  parameter :: dp = kind(1d0)
- 
+
+    ! Small-kF cutoff for the DME radial integrals I2, K1. Both carry a 1/kF^2
+    ! prefactor multiplying a log whose leading term analytically cancels it as
+    ! kF -> 0; in floating point that cancellation is inexact and the residual
+    ! rounding error gets amplified into garbage (and an outright 0/0 -> NaN at
+    ! kF = 0, which HFBTHO grids do reach out in the vacuum tail where rho
+    ! underflows). Below this cutoff the Taylor series is used instead.
+    real(dp), parameter :: kf_small = 1.0e-3_dp
+
     character(len=1), dimension(0:1), parameter :: cbeta = (/'+', '-'/)
  
     public :: init_external_field
@@ -25,6 +33,9 @@ module pnfam_extfield
     public :: set_use_2bc
     public :: tbc_nmlda_da1
     public :: dme_exc
+    public :: forbidden_2bc_rsL
+    public :: forbidden_2bc_PS0
+    public :: dme_axial_2
  
  contains
  
@@ -178,6 +189,10 @@ module pnfam_extfield
           else if (op%use_2bc(2) == 4 .or. op%use_2bc(2) == 5) then
              ! DME exchange term
              rho_fac = rho_fac + dme_exc()
+          else if (op%use_2bc(2) == 6) then
+             ! sigma(q.J^S) piece of the O(q)
+             ! spin-current current, which reduces to -G4*(div J^S)*sigma
+             rho_fac = rho_fac  + dme_spin_current_gt()
           end if
        end if
        ! November 2024: Test out using the I function with R, RS0, RS1. Calculate I_func if we're using one of these operators
@@ -193,7 +208,7 @@ module pnfam_extfield
          endif
           call init_extfield_2bc_type(.false.)
           !12/5/24 Call forbidden_2bc_rsL here
-          correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm)
+          correction_2bc_rsL = forbidden_2bc_rsL(rsL_snm, op%use_2bc(2))
        end if
        !12/4/24 Calling forbidden 2bc functions just once instead of multiple times.
        if (label == 'P') then
@@ -663,8 +678,10 @@ module pnfam_extfield
        if (use_2bc == 0) return
  
        ! Extract digits
-       i1 = get_digit(use_2bc, 5) ! 1=1+2Body, 2=2Body only 
-       i2 = get_digit(use_2bc, 4) ! 1=Full Fam, 2=SNM+LDA, 3=ASNM+LDA
+       i1 = get_digit(use_2bc, 5) ! 1=1+2Body, 2=2Body only
+       i2 = get_digit(use_2bc, 4) ! 1=Full Fam, 2=SNM+LDA, 3=ASNM+LDA,
+                                  ! 4=DME(exc), 5=DME(exc)+FAM(direct),
+                                  ! 6=spin-current sigma(div J)
        i3 = get_digit(use_2bc, 3) ! 1=Gamma, 2=Delta, 3=Gamma+Delta
        i4 = get_digit(use_2bc, 2) ! if >0, then 2bc P current is active
        i5 = get_digit(use_2bc, 1) ! if >0, then 2bc PS0 current is active
@@ -677,7 +694,7 @@ module pnfam_extfield
        op%use_2bc(5) = i5
        op%use_2bc(6) = i6
        ! Check valid digits. i2 can be equal to 0 (no GT 2bc)
-       if ((i1 < 1 .or. i1 > 2) .or. (i2 < 0 .or. i2 > 5) .or. (i3 < 1 .or. i3 > 3)) then
+       if ((i1 < 1 .or. i1 > 2) .or. (i2 < 0 .or. i2 > 6) .or. (i3 < 1 .or. i3 > 3)) then
           ierr = 1
        ! Check valid combos: NM+LDA (i1=2,3) has only Gamma (i3=1) ... and DME?
        else if (i1 /= 1 .and. i3 /= 1) then
@@ -1119,13 +1136,16 @@ module pnfam_extfield
     !See arXiv:1403.7860v1 "Chiral Two-Body Currents and Neutrinoless Double-Beta Decay" eq 7, "Large-scale nuclear structure calculations for spin-dependent WIMP scattering" eq 14
     !The expression matches with the symmetric nuclear matter effective 2bc for the Gamow-Teller operator.
     !(Contact term in rho_fac is rho * cd / (Mn * Fpi^2); exchange term in tbc_nmlda_i1 is rho/(Mn * Fpi^2) * (I_0(rho)*(2/3 c4 - 1/3 c3 + 1/6))
-    function forbidden_2bc_rsL(use_snm) result (iout)
+
+    !2/6/26: test using the DME exc for this instead. Accept use_2bc(2) as a second parameter; if 4 or 5, then use DME instead of SNM/ASNM LDA. 
+    function forbidden_2bc_rsL(use_snm, use_2bc_2) result (iout)
        use hfb_solution, only : nghl
        use hfb_solution, only : hfb_density_coord
        use type_extfield_2bc, only : caux,c3,c4, cd
        use pnfam_constants, only : Mpi, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON
        implicit none
        logical, optional, intent(in) :: use_snm
+       integer, intent(in) :: use_2bc_2 
        logical :: snm
        real(dp), dimension(nghl) :: rho, kf, i0, iout, rhon, rhop
        real(dp) :: m, ca, ch
@@ -1141,17 +1161,23 @@ module pnfam_extfield
        ca = 2*caux
        ch = 1._dp/3._dp*(2*c4 - c3 + 0.5_dp)
  
-       ! Densities
-       if (snm) then
-         call hfb_density_coord(IT_ISOSCALAR, rho)
-         kf = lda_kf_snm(rho)
-         i0 = tbc_nmlda_I0_vec(kf)
-         iout = ca*rho*(cd+ch*i0)
+       !Use the dme_exc if use_2bc(2) = 4 or 5, and add the contact term: rho_fac = (caux*2.0_dp*cd)*(rhon + rhop), since dme_exc does not include it.
+       if (use_2bc_2 == 4 .or. use_2bc_2 == 5) then
+         i0 = dme_exc()
+         iout = ca*rho*cd + i0
        else
-         call hfb_density_coord(IT_NEUTRON,rhon)
-         call hfb_density_coord(IT_PROTON, rhop)
-         iout = ca*(rhon + rhop)*cd + ca*ch*rhon*tbc_nmlda_I0_vec(lda_kf_asnm(rhon)) + ca*ch*rhop*tbc_nmlda_I0_vec(lda_kf_asnm(rhop))
-       endif
+         ! Densities
+         if (snm) then
+            call hfb_density_coord(IT_ISOSCALAR, rho)
+            kf = lda_kf_snm(rho)
+            i0 = tbc_nmlda_I0_vec(kf)
+            iout = ca*rho*(cd+ch*i0)
+         else
+            call hfb_density_coord(IT_NEUTRON,rhon)
+            call hfb_density_coord(IT_PROTON, rhop)
+            iout = ca*(rhon + rhop)*cd + ca*ch*rhon*tbc_nmlda_I0_vec(lda_kf_asnm(rhon)) + ca*ch*rhop*tbc_nmlda_I0_vec(lda_kf_asnm(rhop))
+         endif
+      endif
        !call hfb_density_coord(IT_ISOSCALAR, rho)
        !kf = lda_kf_snm(rho)
        !i0 = tbc_nmlda_I0_vec(kf)
@@ -1269,9 +1295,130 @@ module pnfam_extfield
        rf2 = ca*ch*m*m/(6)*u02_kf2*(0.25_dp*d2r0 - tau0)
        !rf2 = ca*ch*m*m/(6*kf*kf)*u02*(0.25_dp*d2r0 - tau0)
        rf = rf1 - rf2
- 
+
     end function
-    
+
+    !---------------------------------------------------------------------------
+    ! I2 radial integral of the O(q) spin-current DME current (Eq. 19):
+    !   I2(kF) = 4(8kF^2 + 3m^2)/(m^2 (4kF^2 + m^2)^2)
+    !          + 3/(4 kF^2 m^2) ln(1 + 4kF^2/m^2)          [fm^4]
+    ! The rational part is smooth in kF^2 and safe at any kF; only the log part
+    ! needs the small-kF series (see kf_small above).
+    !---------------------------------------------------------------------------
+    function dme_i2(kf) result(i2)
+       use hfb_solution, only : nghl
+       use pnfam_constants, only : hbarc, Mpi
+       implicit none
+       real(dp), dimension(nghl), intent(in) :: kf
+       real(dp), dimension(nghl) :: i2, rat, safe
+       real(dp) :: m
+
+       m   = Mpi/hbarc
+       rat = 4.0_dp*(8.0_dp*kf*kf + 3.0_dp*m*m)/(m*m*(4.0_dp*kf*kf + m*m)**2)
+       safe = max(kf, kf_small)   ! keep the log branch away from tiny kF
+       where (kf < kf_small)
+          i2 = rat + (3.0_dp/m**4 - 6.0_dp*kf*kf/m**6 + 16.0_dp*kf**4/m**8)
+       elsewhere
+          i2 = rat + 3.0_dp/(4.0_dp*safe*safe*m*m) &
+                     *log(1.0_dp + 4.0_dp*safe*safe/(m*m))
+       end where
+
+    end function
+
+    !---------------------------------------------------------------------------
+    ! K1 radial integral of the O(q) spin-current DME current (Eq. 20). The Oq
+    ! term carries only one power of r (from the spin density, no sin) and the
+    ! weight Y1, so it needs its own integral:
+    !   K1(kF) = 4pi Int dr r^2 [j0(kF r)]^2 Y1(r)
+    !          = 1/(4kF^2) ln(1 + 4kF^2/m^2) + 2/(m^2 + 4kF^2)     [fm^2]
+    ! Same small-kF treatment as I2: only the log term is expanded.
+    !---------------------------------------------------------------------------
+    function dme_k1(kf) result(k1)
+       use hfb_solution, only : nghl
+       use pnfam_constants, only : hbarc, Mpi
+       implicit none
+       real(dp), dimension(nghl), intent(in) :: kf
+       real(dp), dimension(nghl) :: k1, rat, safe
+       real(dp) :: m
+
+       m   = Mpi/hbarc
+       rat = 2.0_dp/(m*m + 4.0_dp*kf*kf)
+       safe = max(kf, kf_small)
+       where (kf < kf_small)
+          k1 = rat + (1.0_dp/(m*m) - 2.0_dp*kf*kf/m**4 &
+                      + 16.0_dp/3.0_dp*kf**4/m**6)
+       elsewhere
+          k1 = rat + 1.0_dp/(4.0_dp*safe*safe) &
+                     *log(1.0_dp + 4.0_dp*safe*safe/(m*m))
+       end where
+
+    end function
+
+    !---------------------------------------------------------------------------
+    ! Spin-current sigma(q.J^S) piece of the O(q) DME exchange current, written
+    ! as a multiplicative correction to the one-body Gamow-Teller operator.
+    !
+    ! The new piece of the effective one-body current is
+    !   J^e_J = gA/(mN fpi^2) { G1 (q x J^V)
+    !                          - i[ G2 q(s.J^S) + G3 J^S(s.q) + G4 s(q.J^S) ] } tau_-
+    ! Of these four structures only the G4 one reduces to a multiple of the bare
+    ! GT operator sigma*tau_-. Because q is the momentum transfer, the gradients
+    ! can be moved onto the operator by parts, giving
+    !   sigma(J^S.q) -> -i[ (J^S.grad)sigma + sigma(div J^S) ] = -i sigma(div J^S)
+    ! since the Pauli matrix carries no spatial dependence, so (J^S.grad)sigma=0.
+    ! The two factors of -i then combine,
+    !   -i G4 sigma(q.J^S) -> (-i)(-i) G4 sigma(div J^S) = -G4 (div J^S) sigma ,
+    ! i.e. a purely local, multiplicative renormalization of the GT operator that
+    ! can be applied exactly like dme_exc:
+    !
+    !   rf = -ca * G4(kF(r)) * divJ^S(r)
+    !
+    ! with ca = 2*caux = hbarc^3/(Mn Fpi^2) the current prefactor with gA
+    ! factored out (as in dme_exc, since the 1-body GT operator carries the gA),
+    !   G4 = -m^2 (c3hat + gamma4)/60 * I2 + (1 + c6)/12 * K1     [fm^2]
+    ! evaluated at the local kF(r), gamma4 = c4hat + 1/4, and
+    ! div J^S = div(Jn + Jp) the isoscalar ground-state spin-orbit density
+    ! [fm^-5], so rf comes out dimensionless.
+    !
+    ! NB: the overall sign assumes HFBTHO's dj has the same sign convention as
+    ! div J^S in the notes. That is consistent with how dj enters HFBTHO's own
+    ! spin-orbit energy (C^{rho div J} rho div J with C^{rho div J} = Crdj), but
+    ! it is worth confirming against an independent estimate before drawing
+    ! quantitative conclusions from the sign of the resulting correction.
+    !---------------------------------------------------------------------------
+    function dme_spin_current_gt() result(rf)
+       use hfb_solution, only : nghl, hfb_density_coord, hfb_divJ_coord
+       use type_extfield_2bc, only : caux, c3, c4
+       use pnfam_constants, only : Mpi, hbarc, IT_ISOSCALAR
+       implicit none
+       real(dp), dimension(nghl) :: rho, kf, divj0, g4, rf
+       real(dp) :: m, ca, gamma4
+
+       ! c6 LEC of the O(q) current. It is not part of two_body_current_lecs
+       ! (which holds c3, c4 and cD), so it is set here; ~5.83 from the chiral
+       ! analysis of the axial current.
+       real(dp), parameter :: c6 = 5.83_dp
+
+       ! Constants
+       m      = Mpi/hbarc
+       ca     = 2.0_dp*caux        ! gA/(Mn Fpi^2), gA factored out [fm^3]
+       gamma4 = c4 + 0.25_dp
+
+       ! Densities: isoscalar rho -> local kF, and the isoscalar div J
+       call hfb_density_coord(IT_ISOSCALAR, rho)
+       call hfb_divJ_coord(IT_ISOSCALAR, divj0)
+       kf = lda_kf_snm(rho) ! 1/fm
+
+       ! G4 coefficient [fm^2] at the local kF
+       g4 = -m*m*(c3 + gamma4)/60.0_dp * dme_i2(kf) &
+            + (1.0_dp + c6)/12.0_dp * dme_k1(kf)
+
+       ! Multiplicative GT correction (dimensionless)
+       rf = -ca * g4 * divj0
+
+    end function
+
+
     !no reason to have this in a separate function.
     function forbidden_2bc_P_old(kf, P) result(iout) !compute the integral functions of k_F, P, and Mpi.
        use hfb_solution, only : nghl
@@ -1544,7 +1691,7 @@ module pnfam_extfield
         use hfb_solution, only : hfb_density_coord, d2rho, tau
         use pnfam_constants, only : Mpi, Mn, Fpi, pi, hbarc, IT_ISOSCALAR, IT_PROTON, IT_NEUTRON
         implicit none
-        real(dp), dimension(nghl) :: rho, kf, u12, u12_kf2, u10, rf, d2r0, tau0, u11, u11_kf2, u1_1, rf_olddme
+        real(dp), dimension(nghl) :: rho, kf, u12, u12_kf2, u10, rf, d2r0, tau0, u11, u11_kf2, u1_1
         character(len=200) :: st
         logical :: exists
         integer :: loopvar
@@ -1572,17 +1719,27 @@ module pnfam_extfield
         !according to Dr Engel, in constant density nuclear matter, only the first term involving U_1^{-1} is nonzero since the term with tau0 cancels that with 0.6
         rf = hbarc*Mn/(6.0_dp*Fpi*Fpi) * ((u10 + 0.1_dp * u12) * rho + u12_kf2 / 6.0_dp * (0.25_dp*d2r0 - tau0))
 
-        !Print out rf - rf-olddme for testing.
-        !inquire(file="rf_comparison_dme.txt", exist=exists)
+        !Print out rf, r, z, rho for testing.
+
+        !x(:) = 1.0_dp/y(:)
+        !inquire(file="rf_axialcharge_dme.txt", exist=exists)
         !if (exists .eqv. .false.) then
-        !  open(12, file = 'rf_comparison_dme.txt', status = 'new')
+        !  open(12, file = 'rf_axialcharge_dme.txt', status = 'new')
+        !   !do loopvar=1,nghl  
+        !   !   write(12,*) rf(loopvar)
+        !   !end do  
         !   do loopvar=1,nghl  
-        !      write(12,*) rf(loopvar)
-        !      write(12, *) rf_olddme(loopvar)
+        !      write(12,*) x(loopvar)
+        !   end do  
+        !   do loopvar=1,nghl  
+        !      write(12,*) z(loopvar)
+        !   end do  
+        !   do loopvar=1,nghl  
+        !      write(12,*) rho(loopvar)
         !   end do  
         !   close(12)
         !endif
-        !write(st,'(a20,f10.5,a20,f10.5,a20)') 'rf_olddme: ', rf_olddme(1), ' rf: ', kf(1), 'in dme.'
+        !write(st,'(a20,f10.5,a20,f10.5,a20)') 'density: ', rho(1), ' DME: ', rf(1), 'in dme.'
         !call writelog(st)
 
      end function
@@ -1623,8 +1780,8 @@ module pnfam_extfield
        
        !rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u10 + 0.1_dp*u12)*rho + u22 - u24*kf/(60.0_dp*pi*pi))
        !rf =  (0.25_dp*d2r0 - tau0)
-       
-       rf = gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u10 + 0.1_dp*u12)*rho + u22 - u24*kf/(15.0_dp*pi*pi)&
+       ! test negative? 11/2/26
+       rf = -gA*gA*Mn*hbarc/(4.0_dp * Fpi*Fpi) * ( (u10 + 0.1_dp*u12)*rho + u22 - u24*kf/(15.0_dp*pi*pi)&
        + (u12_kf2/6.0_dp - u24_kf4) * (0.25_dp*d2r0 - tau0))
  
        !constant density case: only u10, u22 terms survive, other terms cancel.

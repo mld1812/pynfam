@@ -600,7 +600,7 @@ class pynfamManager(object):
             print(u"         Failed.")
 
     #--------------------------------------------------------------
-    def gatherHfbLogs(self, pynfam_dir=None, skip=False):
+    def gatherHfbLogs(self, pynfam_dir=None, skip=True):
         """
         Construct dataframe for all hfbtho solutions of a given pynfam run
         from individual hfbtho logfiles.
@@ -609,8 +609,8 @@ class pynfamManager(object):
             pynfam_dir (str): pynfam run directory name
                 (default, self.paths.calc)
             skip (bool): Behavior when there's an error read log
-                True = try to remake log, False = skip this solution
-                (default, False)
+                True = skip this solution, False = try to remake log
+                (default, True)
 
         Returns:
             DataFrame
@@ -630,7 +630,7 @@ class pynfamManager(object):
             # Read the log file
             try:
                 log_df = runlog.readLog(rundir)
-            except IOError:
+            except Exception as e:
                 if skip: continue
                 self.remakeHfbLog(runlabel)
                 log_df = runlog.readLog(rundir)

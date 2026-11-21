@@ -4,6 +4,7 @@
     use_fam_storage = 0
     real_eqrpa = 1.0
     imag_eqrpa = .005
+    write_amplitudes = F
 /
 
 &ext_field

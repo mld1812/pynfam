@@ -192,11 +192,12 @@ def tar_hfb_solns(all_paths, obj_list):
     """
     if not obj_list: return
     # Create tarfle
+    """ 7/31/25: Try not tarring solutions to avoid too many files being created, for the odd odd nuclei
     tar_name = os.path.join(all_paths.hfb_m, hfbthoRun.file_tar)
     with tarfile.open(tar_name,u'w') as tar:
         for n in obj_list:
             tar.add(n.rundir, arcname=os.path.relpath(n.rundir, all_paths.hfb_m))
-
+    """
     # Clean directories
     for n in obj_list:
         up1dir = os.path.dirname(n.rundir)

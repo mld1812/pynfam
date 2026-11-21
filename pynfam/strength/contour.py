@@ -298,7 +298,8 @@ class famContour(object):
         quad = self._settings[u'beta_quadrature']
 
         # EQRPA points (spacing determined by interval and nr_points)
-        de = hw.real*de_hw_ratio
+        # Half-width can be real or imaginary
+        de = np.abs(hw)*de_hw_ratio
         ctr_z = np.arange(emin, emax+de, de)
         if not np.isreal(hw):
             ctr_z = ctr_z*1j + hw.imag

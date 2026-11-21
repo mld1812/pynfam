@@ -508,6 +508,59 @@ contains
 
    end subroutine
 
+   !---------------------------------------------------------------------------
+   ! Return the ground-state vector spin-current (spin-orbit) density J in
+   ! cylindrical poloidal components on the quadrature grid. This is the
+   ! time-even pseudotensor's vector part, J_i = eps_ijk J_jk, which enters the
+   ! first-order (r x J) term of the DME nonlocal spin density (Gebremariam
+   ! PRC 82 Eq. A5 / dme-current-2 Eq. 25). HFBTHO computes J already; from its
+   ! spin-orbit energy assembly the vector components are
+   !    J_r = SFIZ - SZFI  ,  J_z = SRFI - SFIR
+   ! it = IT_NEUTRON, IT_PROTON, or IT_ISOSCALAR (n+p).
+   !---------------------------------------------------------------------------
+   subroutine hfb_spin_current_coord(it, jr, jz)
+      use hfbtho, only : SRFI, SFIR, SZFI, SFIZ
+      use pnfam_constants, only : IT_NEUTRON, IT_PROTON, IT_ISOSCALAR
+      implicit none
+      integer, intent(in) :: it
+      real(dp), intent(out) :: jr(nghl), jz(nghl)
+
+      jr = 0; jz = 0
+      if (it==IT_NEUTRON .or. it==IT_ISOSCALAR) then
+         jr = jr + (SFIZ(:,IT_NEUTRON) - SZFI(:,IT_NEUTRON))
+         jz = jz + (SRFI(:,IT_NEUTRON) - SFIR(:,IT_NEUTRON))
+      end if
+      if (it==IT_PROTON .or. it==IT_ISOSCALAR) then
+         jr = jr + (SFIZ(:,IT_PROTON) - SZFI(:,IT_PROTON))
+         jz = jz + (SRFI(:,IT_PROTON) - SFIR(:,IT_PROTON))
+      end if
+
+   end subroutine
+
+   !---------------------------------------------------------------------------
+   ! Return the ground-state div(J) (spin-orbit density) on the quadrature
+   ! grid -- the coupling partner of crdj (NOT cdrho, which instead multiplies
+   ! rho paired with Delta-rho) in the C^{rho grad.J} rho*div(J) term of the
+   ! functional (Mustonen PRC 90, 024308 Eq. 2). HFBTHO builds this directly
+   ! and exactly from wavefunction derivatives during the density pass (same
+   ! terms used for the J tensor components in hfb_spin_current_coord) -- it
+   ! is not obtained by numerically differentiating J, so there is no
+   ! discretization error here.
+   ! it = IT_NEUTRON, IT_PROTON, or IT_ISOSCALAR (n+p).
+   !---------------------------------------------------------------------------
+   subroutine hfb_divJ_coord(it, divj)
+      use hfbtho, only : dj
+      use pnfam_constants, only : IT_NEUTRON, IT_PROTON, IT_ISOSCALAR
+      implicit none
+      integer, intent(in) :: it
+      real(dp), intent(out) :: divj(nghl)
+
+      divj = 0
+      if (it==IT_NEUTRON .or. it==IT_ISOSCALAR) divj = divj + dj(:,IT_NEUTRON)
+      if (it==IT_PROTON  .or. it==IT_ISOSCALAR) divj = divj + dj(:,IT_PROTON)
+
+   end subroutine
+
    !----------------------------------------------------------------------------
    ! Convert a K>0 q.p. to K<0 or vice versa.
    !----------------------------------------------------------------------------

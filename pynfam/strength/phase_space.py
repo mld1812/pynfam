@@ -69,6 +69,12 @@ class phaseSpace(object):
         return self._settings[u'GV']
 
     @property
+    def UseNewShapeFactors(self):
+        """ UseNewShapeFactors (bool): If the updated shape factor expressions with I-functions should be used.
+        """
+        return self._settings[u'UseNewShapeFactors']
+
+    @property
     def LAM(self):
         """ LAM (float): Positive parameter -gA/gV entering shape factor
         from 'Electron Radial Wavefunctions', 1982, Behrens and Buhring

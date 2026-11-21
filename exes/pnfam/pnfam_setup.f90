@@ -80,6 +80,9 @@ module pnfam_setup
    character(len=200) :: fam_output_filename
    integer            :: use_fam_storage
    real(dp)           :: real_eqrpa, imag_eqrpa
+   ! X/Y transition-amplitude table (labeled by quasiparticle quantum numbers)
+   logical            :: write_amplitudes
+   real(dp)           :: amplitude_cutoff
    ! external field
    character(len=1)  :: beta_type
    character(len=80) :: operator_name
@@ -96,7 +99,7 @@ module pnfam_setup
    real(dp) :: quench_residual_int=1
 
    namelist /general/ fam_output_filename, print_stdout, use_fam_storage,&
-            real_eqrpa, imag_eqrpa
+            real_eqrpa, imag_eqrpa, write_amplitudes, amplitude_cutoff
    namelist /ext_field/ beta_type, operator_name, operator_k, compute_crossterms,&
             two_body_current_mode, two_body_current_usep, two_body_current_lecs
    namelist /solver/ max_iter, broyden_history_size, convergence_epsilon,&
@@ -117,6 +120,7 @@ module pnfam_setup
    character(len=160) :: st
    character(len=80) :: parameter_filename ! input nml
    character(len=200) :: output_txtfile="",output_binfile="",extfield_binfile=""
+   character(len=200) :: output_ampfile=""
    integer :: date_values(8)
 
 contains
@@ -147,6 +151,7 @@ contains
          write(output_binfile,'(a,".bin")') trim(fam_output_filename)
          write(output_txtfile,'(a,".dat")') trim(fam_output_filename)
          write(extfield_binfile,'(a,".tbc")') trim(fam_output_filename)
+         write(output_ampfile,'(a,"_amplitudes.dat")') trim(fam_output_filename)
       else
          print_stdout = .true.
          use_fam_storage = 0
@@ -181,6 +186,7 @@ contains
       ! GENERAL
       fam_output_filename = ''; print_stdout = .true.; use_fam_storage = 0
       real_eqrpa = 0; imag_eqrpa = 0.5_dp
+      write_amplitudes = .false.; amplitude_cutoff = 0.0_dp
       ! EXT_FIELD
       beta_type = '-'; operator_k = 0; operator_name = 'F'
       compute_crossterms = .false.

@@ -404,7 +404,11 @@ class shapeFactor(phaseSpace):
         half_width = np.imag(self.contour.ctr_z[0])
         if self.contour.closed or any(hw != half_width for hw in np.imag(self.contour.ctr_z)):
             half_width = None
-
+        # Get eqrpa variable as contour.ctr_z
+        if not self.contour.closed:
+            eqrpa = np.real(self.contour.ctr_z)
+        else:
+            eqrpa = self.contour.ctr_z
         # Adjust Q if requested (do it here so all values with Q_eff are printed to header)
         Q_eff  = self._settings[u'Q_eff']
         Q_mode = self._settings[u'Q_eff_mode']
@@ -439,6 +443,7 @@ class shapeFactor(phaseSpace):
                    u'alpha*Z'    : ALPHA*abs(Zd),
                    u'alpha*Z/2R' : (ALPHA*abs(Zd)/(2.0*rad)),
                    u'W0_max'     : 1.0 + (hfb_qval/MEC2),
+                   u'wmax'       : 1.0 + ((eqrpamax - eqrpa)/MEC2), #3/23/25: Use old version for wmax for shape factor expressions.
                    u'W0*R'       : ((1.0+hfb_qval)/MEC2*rad)
                    })
 
@@ -600,7 +605,7 @@ class shapeFactor(phaseSpace):
             #11/26/23 implement new condition to only skip if crossterm components aren't computed. alternately, disable this check altogether
             #11/26/24: Ignore it fo rnow
             if genop not in shapeFactor.al_ops_raw and self.ffjk_err(bareop, k):
-                print("Skipped because missing crossterms")
+                #print("Skipped because missing crossterms")
                 continue
             # Strength
             b[bareop][k] = pre[genop]**2*cstr[u'Strength']
@@ -657,7 +662,6 @@ class shapeFactor(phaseSpace):
                 xterm = u'RS1IxRS1'
                 assert_equal(s.cstr_df, self.strengths[u'RS1_K'+str(k)].cstr_df,xterm)
                 b[u'RS1I_RS1'][k] = pre[u'RS1I_K'+str(k)]*pre[u'RS1_K'+str(k)]*cstr[xterm]
-        #np.savetxt("bb.txt", b[u'PS0'][0]) #TESTSAVE
         return b
 
     #---------------------------------------------------------------------------
@@ -673,7 +677,7 @@ class shapeFactor(phaseSpace):
         C_keys  = shapeFactor.C_keys
         all_keys= shapeFactor.al_ops + C_keys
         LAM     = self.sf_metadict[u"LAM"]
-        w0max   = self.sf_metadict[u"W0_max"] # Max beta particle energy
+        w0max   = self.sf_metadict[u"wmax"] # Max beta particle energy
         Zd      = self.sf_metadict[u"Z"]      # Z used in SF (B-=Zf, B+=-Zf, EC=Zi)
         rad     = self.sf_metadict[u"Radius"] # Nuclear radius
         mu1     = mu_ke(1)      # Coulomb function (=1)
@@ -683,14 +687,14 @@ class shapeFactor(phaseSpace):
         alphazed = ec*ALPHA*Zd/rad #11/29/24: Add this expression since we need to separate out the w0max/3 and Alpha*Zd/rad
 
         #12/8/24: Use this variable to choose whether to use the new shape factors.
-        UseNewShapeFactors = True
+        UseNewShapeFactors = self.UseNewShapeFactors
         C = {term : {k : np.zeros(dim) for k in range(3)} for term in all_keys}
         for k in range(3):
             #--------------------------------------------------------------
             # Allowed terms (recall b[op][K-DNE] = 0)
             #--------------------------------------------------------------
             C[u'F'][k]  = b[u'F'][k]*ps[u'f2']
-            C[u'GT'][k] = b[u'GT'][k]*ps[u'f2'] #Set gA=1 for fit, so no LAM**2 term.
+            C[u'GT'][k] = LAM**2*b[u'GT'][k]*ps[u'f2']
 
             #if self.ffk_err[k]: continue #11/29/23: try removing these conditions. may lead to unphysical rates
             #--------------------------------------------------------------
@@ -1275,7 +1279,7 @@ class shapeFactor(phaseSpace):
 
         gt_df[u'Total-GT'] = gt0 + 2.0*gt1
         if zero_neg:
-            gt_df[u'Total-GT'].iloc[gt_df.index[gt_df[u'Total-GT'] < 0]] = 0
+            gt_df.loc[gt_df[u'Total-GT'] < 0, u'Total-GT'] = 0
 
         gtc = self.calcCumulativeStr(gt_df, emin=emin, emax=emax, rate=False)
         gt_df[u'Cumulative-GT'] = gtc[u'Total-GT']

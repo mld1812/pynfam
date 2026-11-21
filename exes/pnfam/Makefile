@@ -46,6 +46,8 @@ USE_HBLAS = 1
 READ_FUNCTIONAL = 0
 
 # Default optimization flags
+SOLVER = GMRES
+#SOLVER = IFAM
 IFORT_OPT = -O3
 
 # Library (L) and header/mod files (I)
@@ -60,7 +62,7 @@ I_HFBTHO = -I../hfbtho_blocking_ba9f1a8/src/hfbtho
 ifneq ($(shell hostname | grep dogwood),)
   L_LINEARALGEBRA = -qmkl
 endif
-ifneq ($(shell hostname | grep ruby),) #12/30/24 - May want to add more machines (Dane) in future.
+ifneq ($(shell hostname | grep -E "ruby|dane"),) #2/25/26: Ruby was retired; add dane
   L_LINEARALGEBRA = -L${MKLROOT}/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl -I"${MKLROOT}/include" -Wl,-rpath,${MKLROOT}/lib
   IFORT_OPT = -O3 -xCORE-AVX2 -axCORE-AVX512 -fma 
 endif
@@ -71,7 +73,7 @@ TYPE_CHECK=0
 # Defining compiler options for: IFORT FORTRAN COMPILER (ifort)
 ifeq ($(COMPILER_TYPE),IFORT)
       CCOMPILER = icc
-      PREPROCESSOR = -fpp -DUSE_ADLB=$(USE_ADLB) \
+      PREPROCESSOR = -fpp -D$(SOLVER) -DUSE_ADLB=$(USE_ADLB) \
                           -DUSE_HBLAS=$(USE_HBLAS) \
                           -DREAD_FUNCTIONAL=$(READ_FUNCTIONAL)
       FORMAT_F90   = -fPIC -free -extend-source

@@ -1,5 +1,29 @@
 r"""
     Author: Tong Li, Mich State Univ, 2020-
+
+    Changelogs by Matthew:
+    -Updated spin-dipole calculation to account for additional factors of K for spherical nuclei.
+    -Commented out numerical error calculations.
+    -Small changes to depreciated parameters in newer packages. 
+    -Added pynfam_fit_wrapper_hfb_or_tbc for calculating just the HFB solutions, or just the two body current files.
+    -Two body current mode option is added; for the GT/SD resonance calculations, two body current will be off since it doesn't 
+    apply in these reactions.
+
+    -Added RecalcMode as a kwarg for pynfam_residual. If set to 1, then it calls pynfam_fit_wrapper_recalc instead of pynfam_fit_wrapper.
+
+    -Added pynfam_fit_wrapper_recalc function. This was originally for recalculating just the beta decay part 
+    when modifying parameters such as gA which do not affect the FAM calculations. It assumes the hfb has already been precalculated
+    and calls savepkl_and_clean with check=True so that it just saves the pynfam_inputs json/pkl, without replacing the existing hfb solutions with '.replaced'.
+    Then, if the hfb solutions already exist, they will not need to be recalculated.
+    -Two body current mode is kept on for GT/SD calculations (for use in the suspicious nuclei contour checks).
+
+
+    It allows for passing in 'fam_ops' as a kwarg so that only the specified operator will be calculated. (Problem: If the fam output files already exist,
+    then since savepkl_and_clean is commented out, they need to be manually removed. Solution: Call a modified version, savepkl_and_clean_operators to 
+    remove only the specified operators output files. Maybe implement this in future.
+
+    #9/3/25: Temporarily use 1- instead of SPINDIPOLE, and turn on crossterms. This is just to investigate the 1- forbidden contour around 0
+    
 """
 
 from pynfam import pynfam_mpi_calc, pynfam_mpi_calc_tbc
@@ -981,7 +1005,7 @@ def pynfam_fit_wrapper_root(input_data, categories, override_setts_fit, override
         for param_dict in (default_setts, override_setts_cat.get(category,{}), override_setts_fit, kwargs):
             if not (param_dict.keys() & override_settings.keys()):
                 # one-level dict input, transform to two-level
-                temp_dict = {'hfb':{}, 'fam':{}, 'ctr': {}, 'psi': {}, 'scaled_params': {}}
+                temp_dict = {'hfb':{}, 'fam':{}, 'ctr': {}, 'psi': {}, 'scaled_params': {}, 'pynfam_inputs': {}} #7/24/25: Add pynfam inputs as option
                 for sub_key, val in param_dict.items():
                     if sub_key in subkey_cat.keys():
                         temp_dict[subkey_cat[sub_key]][sub_key] = val
@@ -1448,7 +1472,6 @@ def pynfam_fit_wrapper(
         assert_consistency = comm.bcast(assert_consistency, root=0)
     #7/26/24: Rarely an error occurs where assert_consistency becomes an array. So, try checking if it's an array.
     #print(f'Assert_consistency: {assert_consistency}, do_mpi: {mu.do_mpi}, comm_size: {comm_size}')
-    assert_consistency = False #1/12/25: Since we're not using assert_consistency but for some reason it's sometimes turning into an array, just set it to False.
     if assert_consistency and mu.do_mpi and comm_size > 1:
         flag = True
         my_params = locals()
@@ -1534,6 +1557,12 @@ class pynfam_residual(object):
         else:
             self.__count = 0
         self.__funflag = False
+
+        #4/6/25: Check for kwarg 'RecalcMode'. If set to 1, then we call pynfam_fit_wrapper_recalc instead of pynfam_fit_wrapper.
+        if 'RecalcMode' in kwargs:
+            self.recalc = True
+        else:
+            self.recalc = False
     
     @property
     def rank(self):
@@ -1585,7 +1614,10 @@ class pynfam_residual(object):
                 'pynfam_residual.call_pynfam must be called via pynfam_residual.fun with restart feature enabled!')
         allargs = deepcopy(self.args)
         allargs.update(fit_vars)
-        self.result = pynfam_fit_wrapper(**allargs, comm=self.comm)
+        if self.recalc:
+            self.result = pynfam_fit_wrapper_recalc(**allargs, comm=self.comm)
+        else:
+            self.result = pynfam_fit_wrapper(**allargs, comm=self.comm)
         return self.result
 
     @staticmethod
@@ -2011,7 +2043,6 @@ def pynfam_fit_wrapper_root_hfb_or_tbc(input_data, categories, override_setts_fi
             continue
         category_set.remove(category)
         data = all_data.loc[all_data['category']==category] # get data for a given category
-
         # construct pynfam_inputs and override_settings for pynfam, hfb only
         # start from pynfam_inputs, whose default values are hard coded here
         pynfam_inputs = {
@@ -2175,3 +2206,702 @@ def pynfam_fit_wrapper_root_hfb_or_tbc(input_data, categories, override_setts_fi
                 printf('Call of pynfam_mpi_calc (tbc part) for', category, 'starts at', datetime.datetime.now())
                 pynfam_mpi_calc_tbc(pynfam_inputs, override_settings, check)
                 printf('Call of pynfam_mpi_calc (tbc part) for', category, 'finishes at', datetime.datetime.now())
+
+
+def files_rename_or_remove_operators(dir_path, extension, suffix, operators, untar=False):
+    # rename or remove files with certain extensions, recursively in dir_path
+    # Operators is a list of operators (ex: GT, F, etc) which are being recalculated and thus need to be 'replaced'. Other
+    # operators should not be touched. This only applies to FAM.
+    if untar:
+        for label in os.listdir(dir_path):
+            # untar all the tar files
+            label_path = os.path.join(dir_path, label)
+            if os.path.isfile(label_path) and label.endswith('.tar') and (not label.endswith('_og.tar')):
+                with tarfile.open(label_path) as ftar:
+                    for member in ftar:
+                        ftar.extract(member, path=dir_path, set_attrs=False)
+                new_path = os.path.join(dir_path, label[:-4] + '_og.tar')
+                move_or_del_file_dir(label_path, new_path)
+
+    # rename or remove files
+    for label in os.listdir(dir_path):
+        label_path = os.path.join(dir_path, label)
+        if os.path.isfile(label_path):
+            #Check if label begins with one of the operators. Since all have OP-K format, we can split by -K and then get the first item.
+            opname = label.split('-K')[0]
+            if opname in operators and label.endswith(extension):
+                if suffix: # rename file by adding suffix
+                    new_path = os.path.join(dir_path, label + suffix)
+                    move_or_del_file_dir(label_path, new_path)
+                else: # remove file
+                    os.remove(label_path)
+        elif os.path.isdir(label_path):
+            files_rename_or_remove_operators(label_path, extension, suffix, operators, untar)
+        else:
+            raise IOError
+
+def savepkl_and_clean_operators(rerun, dir_path, category, restart, pynfam_inputs, override_settings, check, operators):
+    # save input parameters to pkl / json file, and rename existing output files to avoid possible restart problems
+    # Operators is a list of operators (ex: GT, F, etc) which are being recalculated and thus need to be 'replaced'. Other
+    # operators should not be touched. This only applies to FAM.
+    if not os.path.isdir(dir_path):
+        os.makedirs(dir_path)
+        
+    if check:
+        pklfile = open(os.path.join(dir_path, 'pynfam_inputs_'+category+'_check.pkl'), 'wb')
+        jsonfile = open(os.path.join(dir_path, 'pynfam_inputs_'+category+'_check.json'), 'w')
+    else:
+        pkl_path = os.path.join(dir_path, 'pynfam_inputs_'+category+'.pkl')
+        json_path = os.path.join(dir_path, 'pynfam_inputs_'+category+'.json')
+        pklfile = open(pkl_path, 'wb')
+        jsonfile = open(json_path, 'w')
+        # rename old output files when rerun == FAM, HFB or HFB_NORESTART
+        if rerun == 'FAM':
+            search_dirs = {'fam_soln', 'beta_soln'}
+        elif (rerun == 'HFB') or (rerun == 'HFB_NORESTART'):
+            search_dirs = {'hfb_soln', 'fam_soln', 'beta_soln'}
+        else:
+            search_dirs = None
+        if search_dirs:
+            for label in os.listdir(dir_path):
+                label_path = os.path.join(dir_path, label)
+                if not os.path.isdir(label_path): continue
+                if label == 'meta':
+                    continue #Don't touch the meta stuff 
+                    #files_rename_or_remove(label_path, ('.out', '.ctr', '.dat', '.in', '.py'), '.replaced', untar=False)
+                else:
+                    if not label.isdigit(): continue
+                    for subdir in os.listdir(label_path):
+                        subdir_path = os.path.join(label_path, subdir)
+                        if (not subdir in search_dirs) or (not os.path.isdir(subdir_path)): continue
+                        # rename existing output files in subdir_path, based on whether restarting from binaries
+                        if restart:
+                            files_rename_or_remove_operators(subdir_path, ('.out', '.ctr', '.dat', '.in', '.log'), '.replaced', operators, untar=True)
+                        else:
+                            files_rename_or_remove_operators(subdir_path, ('.out', '.ctr', '.dat', '.in', '.log', '.bin', '.hel', '.tar'), \
+                                                   '.replaced', operators, untar=False)
+                
+
+
+def pynfam_fit_wrapper_root_recalculate(input_data, categories, override_setts_fit, override_setts_cat, return_df, clean_files,
+                            exes_dir, scratch_dir, backup_dir, backup_option, backup_max, start_from_backup,
+                            nr_parallel_calcs, nthreads_per_calc, rerun_mode, ignore_hfb_nonconv, hfb_only, use_ratinterp,
+                            comm, rank, check, result_filename, **kwargs):
+    # Work function for root process when recalculating just beta.out or one specific operator.
+    # This is useful for when we want to try, say, using a different gA value in the forbidden 2bc P operator,
+    # or just trying to recalculate half lives (beta.out) with different gA, shape factors.
+    # Key difference is not replacing the FAM output files with .replaced.
+
+    # check / read input_data
+    if isinstance(input_data, str):
+        input_data = pd.read_csv(input_data, header=0, comment='#')
+    else:
+        assert(isinstance(input_data, pd.DataFrame))
+    
+    # tidy up input_data and sort it by categories according to the order of their first appearances
+    all_data = input_data.apply(transform_upper) # change to upper case
+    all_categories = tuple(all_data['category'])
+    all_categories_pure = tuple(sorted(set(all_categories), key=all_categories.index)) # remove duplicates but keep order
+    all_data['cat_index'] = tuple(map(all_categories_pure.index, all_categories)) # add auxialiary column for sort
+    all_data.sort_values(by='cat_index', inplace=True, kind='mergesort', ascending=True)
+    all_data.drop('cat_index', axis=1, inplace=True) # drop auxiliary column
+
+    # check list / tuple inputs, or convert dict inputs to tuples and check
+    if categories is None:
+        categories = all_categories_pure
+    if not isinstance(categories, (list, tuple)):
+        categories = (categories,)
+    categories = tuple(map(str.upper, categories)) # change to upper case
+    def dict_to_tuple_by_cat(d, cats): # convert dict to tuple according to categories
+        if not isinstance(d, dict):
+            return (d,) * len(categories)
+        temp_d = {str(k).upper(): v for k, v in d.items()}
+        return tuple(temp_d.get(cat, None) for cat in cats)
+    nr_parallel_calcs = dict_to_tuple_by_cat(nr_parallel_calcs, categories)
+    nthreads_per_calc = dict_to_tuple_by_cat(nthreads_per_calc, categories)
+    rerun_mode = tuple(x.upper() if isinstance(x, str) else x \
+                       for x in dict_to_tuple_by_cat(rerun_mode, categories)) # change to upper case
+    assert(all(x in {None,0,1,'FAM','HFB','HFB_NORESTART'} for x in rerun_mode))
+    ignore_hfb_nonconv = tuple(x if x is not None else 2 for x in \
+                            dict_to_tuple_by_cat(ignore_hfb_nonconv, categories)) # change None to 2
+    hfb_only = dict_to_tuple_by_cat(hfb_only, categories)
+
+    # check other inputs
+    assert(isinstance(override_setts_fit, dict))
+    assert(isinstance(override_setts_cat, dict))
+    assert(use_ratinterp in {0,1,2})
+    assert(backup_option in {0,1,2,-1,-2})
+    assert(isinstance(backup_max, int))
+    assert(isinstance(backup_dir, str))
+    assert(isinstance(start_from_backup, int))
+    assert(isinstance(scratch_dir, str))
+    assert(isinstance(exes_dir, str))
+
+    # prepare scratch dir
+    scratch_dir_path = os.path.realpath(scratch_dir)
+    if not os.path.isdir(scratch_dir_path):
+        os.makedirs(scratch_dir_path)
+
+    # prepare backup dir and get backup files if we need
+    if backup_option or start_from_backup >= 0:
+        backup_dir_path = os.path.realpath(backup_dir)
+        if not os.path.isdir(backup_dir_path):
+            os.makedirs(backup_dir_path)
+        if start_from_backup >= 0:
+            if not scratch_from_backup(os.path.join(backup_dir_path, str(start_from_backup)), scratch_dir_path, categories):
+                start_from_backup = -1
+    
+    # main work starts
+    support_categories = {'GT', 'SD', 'HL', 'GAP'}
+    category_set = set(categories) & set(all_categories_pure) & support_categories
+    all_model_results = []
+    all_rerun_equal_zero = True
+    if ('GT' in category_set) or ('SD' in category_set): # prepare for energy conversion
+        converter = energy_convert(all_data.loc[(all_data['category']=='GT') | (all_data['category']=='SD')])
+    # rename existing result files
+    move_or_del_file_dir(os.path.join(scratch_dir_path, result_filename +'.pkl'), \
+                         os.path.join(scratch_dir_path, result_filename +'.pkl.replaced'))
+    move_or_del_file_dir(os.path.join(scratch_dir_path, result_filename +'_other.pkl'), \
+                         os.path.join(scratch_dir_path, result_filename +'_other.pkl.replaced'))
+    move_or_del_file_dir(os.path.join(scratch_dir_path, result_filename +'.csv'), \
+                         os.path.join(scratch_dir_path, result_filename +'.csv.replaced'))
+
+    for ind, category in enumerate(categories):
+        printf('Category:', category)
+        model_results = []
+        output_dfs = []
+        conv_info = []
+        maxsi_info = []
+        num_errors = []
+
+        # avoid duplicate / unsupported category or category with no data
+        if category not in category_set:
+            printf('Warning: Category', category, 'is unsupported, missing in input data or duplicate! Skipped.')
+            continue
+        category_set.remove(category)
+        data = all_data.loc[all_data['category']==category] # get data for a given category
+
+        # construct pynfam_inputs and override_settings for pynfam, hfb only
+        # start from pynfam_inputs, whose default values are hard coded here
+
+        pynfam_inputs = {
+        'directories': {
+            'outputs' : category,
+            'exes'    : exes_dir,
+            'scratch' : scratch_dir
+            },
+        'nr_parallel_calcs': nr_parallel_calcs[ind],
+        'nthreads_per_calc': nthreads_per_calc[ind],
+        'hfb_mode': {
+            'dripline_mode'  : 0,
+            'ignore_nonconv' : ignore_hfb_nonconv[ind],
+            'gs_def_scan'    : (-2, (-0.2,0.0,0.2)),
+            'retry_nonconv'  : True
+            #'extra_inputs'   : ()
+            },
+        'fam_mode': {
+            'fam_contour'       : None,
+            'beta_type'         : '-',
+            'fam_ops'           : 'ALL'
+            }
+        }
+        if 'fam_ops' in kwargs: #If a fam_ops is passed in, set it as default.
+            pynfam_inputs['fam_mode']['fam_ops'] = kwargs['fam_ops']
+            del kwargs['fam_ops']
+
+        # override_settings from various dicts
+        override_settings = {'pynfam_inputs':{}, 'hfb': {}, 'fam': {}, 'ctr': {}, 'psi': {}, 'scaled_params': {}}
+        for param_dict in (default_setts, override_setts_cat.get(category,{}), override_setts_fit, kwargs):
+            if not (param_dict.keys() & override_settings.keys()):
+                # one-level dict input, transform to two-level
+                temp_dict = {'hfb':{}, 'fam':{}, 'ctr': {}, 'psi': {}, 'scaled_params': {}, 'pynfam_inputs': {}} #7/24/25: Add pynfam inputs as option
+                for sub_key, val in param_dict.items():
+                    if sub_key in subkey_cat.keys():
+                        temp_dict[subkey_cat[sub_key]][sub_key] = val
+                    else:
+                        printf('Warning: One-level setting', sub_key, 'is ignored!')
+            else:
+                # two-level dict input
+                temp_dict = param_dict
+            for key, sub_dict in temp_dict.items():
+                if key not in override_settings.keys():
+                    printf('Warning: First-level setting', key, 'is ignored!')
+                    continue
+                for sub_key, val in sub_dict.items():
+                    if sub_key in subkey_cat.keys():
+                        override_settings[key][sub_key] = val
+                    else:
+                        printf('Warning: Second-level setting', sub_key, 'is ignored!')
+        # update pynfam_inputs from override_settings['pynfam_inputs']
+        pynfam_inputs_update = override_settings.pop('pynfam_inputs')
+        if 'gs_def_scan' in pynfam_inputs_update:
+            pynfam_inputs['hfb_mode']['gs_def_scan'] = pynfam_inputs_update['gs_def_scan']
+        if 'beta_type' in pynfam_inputs_update:
+            pynfam_inputs['fam_mode']['beta_type'] = pynfam_inputs_update['beta_type']
+        if 'fam_ops' in pynfam_inputs_update:
+            pynfam_inputs['fam_mode']['fam_ops'] = pynfam_inputs_update['fam_ops']
+        # neutron / proton numbers
+        override_settings['hfb']['proton_number'] = tuple(data['Z'])
+        override_settings['hfb']['neutron_number'] = tuple(data['N'])
+        #7/25/24: Change so that for resonance calcs (GT/SD), two body current mode is turned off.
+        #8/29/25: For recalc, keep two body current mode on (for suspicious contour calculations).
+        #if category == 'GT' or category == 'SD':
+        #    if 'two_body_current_mode' in override_settings['fam']:
+        #        del override_settings['fam']['two_body_current_mode']
+        # deformation info given in input dataframe
+        if 'deformation' in data.columns:
+            hfb_gs_def_scan = []
+            fail_row = []
+            for row, deformation in zip(data.index, data['deformation']):
+                if isinstance(deformation, str):
+                    scan_val = []
+                    if deformation.find('O') >= 0: # oblate
+                        scan_val.append(-0.2)
+                    if deformation.find('S') >= 0: # spherical
+                        scan_val.append(0.0)
+                    if deformation.find('P') >= 0: # prolate
+                        scan_val.append(0.2)
+                    if not scan_val: # deal with string input like '(0.0,0.2)', '[0.0,0.2]', '0.0,0.2'
+                        try:
+                            scan_val = map(float, deformation.strip('()[] ').split(','))
+                        except:
+                            fail_row.append(row)
+                            scan_val = (-0.2,0.0,0.2)
+                    hfb_gs_def_scan.append((-2, tuple(scan_val)))
+                elif isinstance(deformation, tuple):
+                    hfb_gs_def_scan.append(deformation)
+                else:
+                    fail_row.append(row)
+                    hfb_gs_def_scan.append(pynfam_inputs['hfb_mode']['gs_def_scan']) # default value
+            if fail_row:
+                printf('Info: Deformation scan uses default', pynfam_inputs['hfb_mode']['gs_def_scan'], 'in row(s)', fail_row)
+            if len(set(hfb_gs_def_scan)) == 1:
+                pynfam_inputs['hfb_mode']['gs_def_scan'] = hfb_gs_def_scan[0]
+            else:
+                pynfam_inputs['hfb_mode']['gs_def_scan'] = hfb_gs_def_scan
+        else:
+            hfb_gs_def_scan = [pynfam_inputs['hfb_mode']['gs_def_scan']] * len(data)
+            printf('Info: Deformation scan uses default', pynfam_inputs['hfb_mode']['gs_def_scan'])
+
+        # check input and set rerun mode
+        dir_path = os.path.join(scratch_dir_path, category)
+        if rerun_mode[ind] is None:
+            rerun, pynfam_inputs_hfb, override_settings_hfb = get_rerun('hfb', dir_path, category, pynfam_inputs, override_settings)
+            if pynfam_inputs_hfb:
+                # update pynfam_inputs_hfb and override_settings_hfb, except fam/ctr part; both dicts will be saved in the pkl file
+                for key in pynfam_inputs.keys():
+                    if key != 'fam_mode':
+                        pynfam_inputs_hfb[key] = pynfam_inputs[key]
+                for key in override_settings.keys():
+                    if key != 'fam' and key != 'ctr':
+                        override_settings_hfb[key] = override_settings[key]
+            else:
+                pynfam_inputs_hfb, override_settings_hfb = pynfam_inputs, override_settings
+        else:
+            rerun = rerun_mode[ind]
+            pynfam_inputs_hfb, override_settings_hfb = pynfam_inputs, override_settings
+            if rerun in {0,1,'FAM'}:
+                printf("Warning: It's dangerous to set rerun_mode=0, 1 or FAM without checking the pkl file for the HFB part.")
+        if 'restart_file' not in override_settings['hfb']:
+            override_settings['hfb']['restart_file'] = DEFAULTS['hfb']['HFBTHO_ITERATIONS']['restart_file']
+        if rerun == 'HFB_NORESTART': # when number of shells is changed, hfb cannot restart from existing binary files.
+            override_settings['hfb']['restart_file'] = override_settings_hfb['hfb']['restart_file'] = 1
+        pynfam_inputs['rerun_mode'] = pynfam_inputs_hfb['rerun_mode'] = rerun if isinstance(rerun, int) else 0
+        printf('HFB rerun_mode is', rerun)
+        all_rerun_equal_zero = all_rerun_equal_zero and (rerun == 0)
+
+        # save pkl and file clean before starting the main calculation
+        savepkl_and_clean(rerun, dir_path, category, override_settings['hfb']['restart_file']<0, \
+                          pynfam_inputs_hfb, override_settings_hfb, True) # savepkl and clean with check=True, so it just dumps the pynfam_inputs json/pkl
+        # rename existing result files
+        move_or_del_file_dir(os.path.join(dir_path, result_filename + '_' + category + '.pkl'), \
+                             os.path.join(dir_path, result_filename + '_' + category + '.pkl.replaced'))
+        move_or_del_file_dir(os.path.join(dir_path, result_filename + '_' + category + '.csv'), \
+                             os.path.join(dir_path, result_filename + '_' + category + '.csv.replaced'))
+
+        # read info from hfb calcs to check whether we can avoid calling pynfam_mpi_calc
+        all_hfb_OK = False
+        if rerun in {0,1,'FAM'}:
+            all_hfb_OK, functional_info, lambda_n, lambda_p, pair_gap_n, pair_gap_p = read_hfb(dir_path, len(data))
+
+        # run pynfam, hfb only
+        if rerun != 1 and (not all_hfb_OK):
+            # when rerun==1 or hfb info is extracted successfully, no HFB calc will be performed
+            if mu.do_mpi:
+                pynfam_inputs, override_settings, check = comm.bcast((pynfam_inputs, override_settings, check), root=rank)
+            printf('Call of pynfam_mpi_calc (HFB part) for', category, 'starts at', datetime.datetime.now())
+            pynfam_mpi_calc(pynfam_inputs, override_settings, check)
+            printf('Call of pynfam_mpi_calc (HFB part) for', category, 'finishes at', datetime.datetime.now())
+            # read info from hfb calcs (again)
+            all_hfb_OK, functional_info, lambda_n, lambda_p, pair_gap_n, pair_gap_p = read_hfb(dir_path, len(data))
+        else:
+            printf("Call of pynfam_mpi_calc (HFB part) is skipped for", category)
+
+        # Shall we skip FAM part?
+        if not all_hfb_OK:
+            if check:
+                printf("Warning: PyNFAM run of", category, "does not have valid HFB files to check FAM part! FAM part is skipped.")
+            else:
+                printf_err("Error: PyNFAM run of", category, "does not give valid HFB files! FAM part is skipped.")
+        elif hfb_only[ind]:
+            printf("Call of pynfam_mpi_calc (FAM part) is skipped for", category, 'because of hfb_only setting.')
+        elif category == 'GAP':
+            printf("Call of pynfam_mpi_calc (FAM part) is skipped for", category)
+        if (not all_hfb_OK) or (hfb_only[ind] and category != 'GAP'):
+            # when category is 'GAP', we still need to run codes below to collect results
+            all_model_results.append(deepcopy(data))
+            continue
+
+        # beta type
+        if 'beta_type' in data.columns:
+            btypes = [b if not pd.isnull(b) else pynfam_inputs['fam_mode']['beta_type'] for b in data['beta_type']]
+            if len(set(btypes)) == 1:
+                pynfam_inputs['fam_mode']['beta_type'] = btypes[0]
+            else:
+                pynfam_inputs['fam_mode']['beta_type'] = btypes
+        else:
+            btypes = (pynfam_inputs['fam_mode']['beta_type'],) * len(data)
+        
+        # construct input for pynfam, fam only
+        if category == 'GT' or category == 'SD': # Gamow-Teller or spin-dipole resonance
+            if category == 'GT':
+                long_category = 'GAMOWTELLER'; kval_category = 'GT'
+            else:
+                long_category = kval_category = 'FORBIDDEN' #9/3/25: Temporarily use Forbidden instead of SPINDIPOLE. 
+            to_couplings(override_settings, functional_info) # convert scaled parameters to couplingss
+            pynfam_inputs['fam_mode']['fam_contour'] = 'CONSTR'
+            # energy conversion, see the appendix of PRC 101, 044305 (2020)
+            # 8/15/25: Skip this step in recalc - I'm using it for computing suspicious nuclei contours. 
+            """
+            override_settings['ctr']['energy_min'] = tuple(converter.shift_Ex_to_QRPA(Emin, Z, N, ln, lp, btype) \
+                                                           for Emin, Z, N, ln, lp, btype in \
+                                                           zip(data['energy_min'], data['Z'], data['N'], lambda_n, lambda_p, btypes))
+            override_settings['ctr']['energy_max'] = tuple(converter.shift_Ex_to_QRPA(Emax, Z, N, ln, lp, btype) \
+                                                           for Emax, Z, N, ln, lp, btype in \
+                                                           zip(data['energy_max'], data['Z'], data['N'], lambda_n, lambda_p, btypes))
+            """
+            if 'half_width' in data.columns:
+                if 'half_width' not in override_settings['ctr']:
+                    override_settings['ctr']['half_width'] = DEFAULTS['CONSTR']['half_width']
+                hw_tuple = tuple(x if not np.isnan(x) else override_settings['ctr']['half_width'] for x in data['half_width'])
+                override_settings['ctr']['half_width'] = hw_tuple
+            if 'de_hw_ratio' in data.columns:
+                if 'de_hw_ratio' not in override_settings['ctr']:
+                    override_settings['ctr']['de_hw_ratio'] = DEFAULTS['CONSTR']['de_hw_ratio']
+                rt_tuple = tuple(x if not np.isnan(x) else override_settings['ctr']['de_hw_ratio'] for x in data['de_hw_ratio'])
+                override_settings['ctr']['de_hw_ratio'] = rt_tuple
+            if 'deformation' in data.columns: # reduce computation for spherical case
+                ops = []
+                sph_row = []
+                for row, deformation in zip(data.index, hfb_gs_def_scan):
+                    if deformation == (-2, (0.0,)): # spherical case
+                        ops.append((kval_category, 0))
+                        sph_row.append(row)
+                    else:
+                        ops.append(long_category)
+                if sph_row:
+                    printf('Info:', category, 'operator uses K=0 only for spherical system(s) in row(s)', sph_row)
+                pynfam_inputs['fam_mode']['fam_ops'] = ops[0] if len(set(ops)) == 1 else ops
+            else:
+                pynfam_inputs['fam_mode']['fam_ops'] = long_category
+            # remove unnecessary ctr keys. 8/15/25: Add hfb_emin_buff as necessary key
+            override_settings['ctr'] = {x: val for x, val in override_settings['ctr'].items() \
+                                       if x in DEFAULTS['ctr']['CONSTR'].keys() or x == 'energy_min' or x == 'energy_max' or x == 'hfb_emin_buff'}
+            if category == 'SD':
+                override_settings['fam']['compute_crossterms'] = True #don't compute crossterms for SD - 6/26/24; temporarily keep this on, 9/3/25
+        elif category == 'HL': # beta decay half-life
+            to_couplings(override_settings, functional_info) # convert scaled parameters to couplings
+            pynfam_inputs['fam_mode']['fam_contour'] = 'CIRCLE'
+            if 'op' in data.columns: # fam operators
+                ops_str = []
+                fail_row = []
+                for row, operator in zip(data.index, data['op']):
+                    if operator in {'ALL','ALLOWED','FORBIDDEN','GAMOWTELLER','SPINDIPOLE','0+','1+','0-','1-','2-'}:
+                        ops_str.append(operator)
+                    else:
+                        ops_str.append(pynfam_inputs['fam_mode']['fam_ops']) # default value
+                        fail_row.append(row)
+                if fail_row:
+                    printf('Info: HL operator uses default', pynfam_inputs['fam_mode']['fam_ops'], 'in row(s)', fail_row)
+            else:
+                ops_str = [pynfam_inputs['fam_mode']['fam_ops']] * len(data) # default value
+                printf('Info: HL operator uses default', pynfam_inputs['fam_mode']['fam_ops'])
+            if 'deformation' in data.columns: # reduce computation for spherical case
+                ops = []
+                sph_row = []
+                for row, deformation, op_str in zip(data.index, hfb_gs_def_scan, ops_str):
+                    if deformation == (-2, (0.0,)): # spherical case
+                        ops.append((op_str, 0))
+                        sph_row.append(row)
+                    else:
+                        ops.append(op_str)
+                if sph_row:
+                    printf('Info: HL operator uses K=0 only for spherical system(s) in row(s)', sph_row)
+            else:
+                ops = ops_str
+            pynfam_inputs['fam_mode']['fam_ops'] = ops[0] if len(set(ops)) == 1 else ops
+            # remove unnecessary ctr keys. 8/28/25: Keep the key 'energy_min' (for when we're trying to set E_gs=0), energy_max
+            override_settings['ctr'] = {x: val for x, val in override_settings['ctr'].items() if x in DEFAULTS['ctr']['CIRCLE'].keys() or x == 'energy_min' or x == 'energy_max'}
+        elif category == 'GAP': # pairing gap (HFB only, no FAM to be done)
+            pass
+        else:
+            continue # unsupported category, ignore
+
+        if pynfam_inputs['fam_mode']['fam_contour'] is not None:
+            # check input and set rerun mode (again)
+            if rerun_mode[ind] is None:
+                if (rerun !='HFB') and (rerun != 'HFB_NORESTART'):
+                    # if hfb is not rerun, check fam input; otherwise, fam will be rerun without checking
+                    rerun, _, _ = get_rerun('fam', dir_path, category, pynfam_inputs, override_settings)
+            else:
+                rerun = rerun_mode[ind]
+                if rerun == 0 or rerun == 1:
+                    printf("Warning: It's dangerous to set rerun_mode=0 or 1 without checking the pkl file for the FAM part.")
+            if 'use_fam_storage' not in override_settings['fam']:
+                override_settings['fam']['use_fam_storage'] = DEFAULTS['fam']['GENERAL']['use_fam_storage']
+            if (rerun == 'HFB_NORESTART') and (override_settings['fam']['use_fam_storage'] == -1):
+                # when number of shells is changed, fam cannot restart from existing binary files.
+                override_settings['fam']['use_fam_storage'] = 1
+            pynfam_inputs['rerun_mode'] = rerun if isinstance(rerun, int) else 0
+            printf('FAM rerun_mode is', rerun)
+            all_rerun_equal_zero = all_rerun_equal_zero and (rerun == 0)
+
+            # save pkl and file clean before start the main calculation (again)
+            #if (rerun == 'HFB') or (rerun == 'HFB_NORESTART'): rerun = 'FAM'
+            #8/29/25: If fam_ops is not All, then get list of operators to recalculate and run savepkl_and_clean_operators 
+            #savepkl_and_clean_operators(rerun, dir_path, category, override_settings['fam']['use_fam_storage']<0, \
+            #                  pynfam_inputs, override_settings, check, ['P', 'PS0', 'RS0', 'RS1', 'RS0I', 'RS1I', 'RS2'])
+
+            # run pynfam, fam only
+            if mu.do_mpi:
+                pynfam_inputs, override_settings, check = comm.bcast((pynfam_inputs, override_settings, check), root=rank)
+            printf('Call of pynfam_mpi_calc (FAM part) for', category, 'starts at', datetime.datetime.now())
+            #print(pynfam_inputs)
+            #print(override_settings)
+            pynfam_mpi_calc(pynfam_inputs, override_settings, check)
+            printf('Call of pynfam_mpi_calc (FAM part) for', category, 'finishes at', datetime.datetime.now())
+        
+        if check: continue # finish check
+
+        # get output from files
+        soln_dir = 'beta_soln'
+        detail_dir = 'fam_soln'
+        if category == 'GT': # Gamow-Teller resonance
+            output_filename = 'gamow_teller.out'
+            column_name = 'Total-GT'
+            detail_fnmatch = 'GT-K[0-1].out'
+        elif category == 'SD': # spin-dipole resonance
+            output_filename = 'totalSD_str.out'
+            column_name = 'Total-SD'
+            detail_fnmatch = 'RS[0-2]-K[0-2].out'
+        elif category == 'HL': # beta decay half-life
+            output_filename = 'beta.out'
+            column_name = 'Half-Life(s)'
+        elif category == 'GAP': # pairing gap
+            soln_dir = 'hfb_soln'
+            detail_dir = 'hfb_soln'
+            output_filename = 'thoout.dat'
+        else:
+            continue # unsupported category, ignore
+        
+        num = -1
+        for label in sorted(os.listdir(dir_path)): # go through all the directory labels
+            if not label.isdigit(): continue
+            label_path = os.path.join(dir_path, label)
+            if not os.path.isdir(label_path): continue
+            num += 1
+            if num >= len(data): break
+            output_path = os.path.join(label_path, soln_dir, output_filename)
+            detail_dir_path = os.path.join(label_path, detail_dir)
+            if (not os.path.isfile(output_path)) or (not os.path.isdir(detail_dir_path)):
+                printf_err("Error: PyNFAM run of", category, label, "does not give necessary output file(s)!")
+                model_results.append(np.nan); output_dfs.append(np.nan); num_errors.append(np.nan)
+                continue
+
+            if category == 'GT' or category == 'SD': # Gamow-Teller or spin-dipole resonance
+                output_df = pd.read_csv(output_path, sep=r'\s+', header=0, comment=u'#', index_col=0)
+                peak_pos, num_error = detaildf_process_GTSD(output_df, category, label, column_name, converter, \
+                                        data['Z'].iat[num], data['N'].iat[num], lambda_n[num], lambda_p[num], btypes[num], \
+                                        detail_dir_path, detail_fnmatch, use_ratinterp)
+                model_results.append(peak_pos)
+                num_errors.append(num_error)
+
+            elif category == 'HL': # beta decay half-life
+                output_df = pd.read_csv(output_path, sep=r'\s+', header=0, comment=u'#', index_col=0)
+                detaildf_process_HL(output_df, hfb_gs_def_scan[num] == (-2, (0.0,)))
+                model_results.append(output_df.at['Total', column_name])
+                #num_errors.append(output_df.at['Total', 'NumErr_'+column_name])
+
+            elif category == 'GAP': # pairing gap
+                if 'op' in data.columns:
+                    select = data['op'].iat[num]
+                else:
+                    select = None
+                if select == 'N' or select == 'NEUTRON':
+                    model_results.append(pair_gap_n[num])
+                elif select == 'P' or select == 'PROTON':
+                    model_results.append(pair_gap_p[num])
+                else:
+                    model_results.append((pair_gap_n[num], pair_gap_p[num]))
+                output_df = np.nan
+                num_errors.append(np.nan)
+
+            output_dfs.append(output_df)
+        # loop over labels ends here
+
+        # read convergence info and max si
+        log_path = os.path.join(dir_path, 'meta', 'logfile_master.dat')
+        if not os.path.isfile(log_path):
+            printf_err("Error: PyNFAM run of", category, "does not give a log file! Nonconvergence assumed.")
+            conv_info.extend((False,)*len(data))
+            maxsi_info.extend((np.nan,)*len(data))
+        else:
+            log_df = pd.read_csv(log_path, sep=r'\s+', header=0, comment=u'#', index_col=0)
+            HFB_Conv = (log_df['HFB_Conv'] == 'Yes')
+            FAM_Conv = (log_df['FAM_Conv'] == 'Yes') if 'FAM_Conv' in log_df.columns else True
+            Both_Conv = (HFB_Conv & FAM_Conv)
+            if len(Both_Conv) > len(data):
+                Both_Conv = Both_Conv[:len(data)]
+            conv_info.extend(Both_Conv)
+            nonConv_labels = [str(ii).zfill(6) for ii, conv in enumerate(Both_Conv) if not conv]
+            if nonConv_labels:
+                printf("Warning: PyNFAM run of", category, "has non-convergent point(s) with following label(s).")
+                printf(*nonConv_labels)
+            if 'Max_FAM_Si' in log_df:
+                maxsi_info.extend(log_df['Max_FAM_Si'])
+            else:
+                maxsi_info.extend((np.nan,)*len(data))
+            
+        # save results into all_model_results and write it onto disk
+        category_df = deepcopy(data)
+        category_df['model_raw'] = model_results
+        #category_df['num_error_raw'] = num_errors
+        df_func_residual(category_df, category) # apply func and calculate residuals
+        category_df['convergence'] = conv_info
+        #category_df['max_fam_si'] = maxsi_info
+        category_df['detail'] = output_dfs
+        all_model_results.append(category_df)
+        csv_cols = [col for col in category_df.columns if col != 'detail']
+        category_df.to_csv(os.path.join(dir_path, result_filename + '_' + category + '.csv'), \
+                           columns=csv_cols, index=False)
+        #category_df.to_pickle(os.path.join(dir_path, result_filename + '_' + category + '.pkl')) #Don't pickle
+
+        # clean replaced dir and files
+        if clean_files:
+            replaced_dir_path = os.path.join(scratch_dir_path, category+'_replaced')
+            if os.path.isdir(replaced_dir_path):
+                try:
+                    move_or_del_file_dir(replaced_dir_path)
+                except:
+                    printf('Warning: Replaced dir', replaced_dir_path, 'is not fully cleaned!')
+            try:
+                files_rename_or_remove(dir_path, '.replaced', None)
+            except:
+                printf('Warning: Replaced files in', dir_path, 'are not fully cleaned!')
+    # loop over categories ends here
+
+    # finish check
+    if check:
+        if mu.do_mpi:
+            comm.bcast(all_rerun_equal_zero, root=rank)
+        return all_rerun_equal_zero
+
+    # reorder and save results into output_data and also on disk
+    output_data = pd.concat(all_model_results, sort=False)
+    output_data.sort_index(inplace=True, ascending=True) # get back to the original order
+    df_clean(output_data, 'exp_raw' in input_data) # drop unnecessary columns
+    csv_cols = [col for col in output_data.columns if col != 'detail']
+    output_data.to_csv(os.path.join(scratch_dir_path, result_filename +'.csv'), columns=csv_cols, index=False)
+    #output_data.to_pickle(os.path.join(scratch_dir_path, result_filename +'.pkl'))
+    #with open(os.path.join(scratch_dir_path, result_filename +'_other.pkl'), 'wb') as fileobj:
+    #    pickle.dump(categories, fileobj)
+    #    pickle.dump(all_rerun_equal_zero, fileobj)
+    #    pickle.dump(start_from_backup, fileobj)
+    if clean_files:
+        try:
+            # clean "result.pkl.replaced"
+            for extension in ('.pkl', '.csv'):
+                replaced_result_path = os.path.join(scratch_dir_path, result_filename + extension + '.replaced')
+                if os.path.isfile(replaced_result_path):
+                    os.remove(replaced_result_path)
+        except:
+            printf('Warning: Replaced result files are not fully cleaned!')
+    
+    # Don't backup
+
+    # return
+    if not return_df:
+        output_data = output_data.to_dict('list')
+    if mu.do_mpi:
+        output_data = comm.bcast(output_data, root=rank)
+    return output_data
+
+def pynfam_fit_wrapper_recalc(
+        input_data, categories=None, override_setts_fit={}, override_setts_cat={}, return_df=True, clean_files=True,
+        exes_dir='./exes', scratch_dir='./scratch', backup_dir='./backup', backup_option=-1, backup_max=-1, start_from_backup=-1,
+        nr_parallel_calcs=None, nthreads_per_calc=None, rerun_mode=None, ignore_hfb_nonconv=2, hfb_only=False, use_ratinterp=1,
+        assert_consistency=False, comm=None, check=False, **kwargs):
+    # This is the function open to outside for fitting
+                   
+    # Setup MPI variables
+    if mu.do_mpi:
+        if comm is None: # no MPI communicator input from outside wrapper
+            comm = mu.MPI.COMM_WORLD
+        assert(isinstance(comm, mu.MPI.Comm))
+        rank, comm_size = mu.pynfam_mpi_traits(comm)
+    else:
+        rank, comm_size = 0, 1
+    if mu.do_mpi and (comm_size == 1):
+        mu.do_mpi = False
+        print(u"*** Only one MPI task requested. Performing serial calculation. ***")
+
+    if rank == 0:
+        printf('Call of pynfam_fit_wrapper starts at', datetime.datetime.now())
+    
+    # parameters that cannot be changed by input parameters (for simplicity)
+    # ignore_nonconv = 2
+    # hfb_restart_file = None # HFB restart_file option
+    # use_fam_storage = None # FAM use_fam_storage option
+    # Ex_input = True # whether input energy is the excitation energy w.r.t. the daughter nucleus
+    result_filename = 'result'
+
+    # check consistency of parameters between processes
+    if mu.do_mpi:
+        assert_consistency = comm.bcast(assert_consistency, root=0)
+    #7/26/24: Rarely an error occurs where assert_consistency becomes an array. So, try checking if it's an array.
+    #print(f'Assert_consistency: {assert_consistency}, do_mpi: {mu.do_mpi}, comm_size: {comm_size}')
+    if assert_consistency and mu.do_mpi and comm_size > 1:
+        flag = True
+        my_params = locals()
+        if rank == 0:
+            all_params, all_input_data = zip(*comm.gather((None, None), root=0))
+            for proc in range(1, comm_size):
+                params = all_params[proc]
+                input_data_recv = all_input_data[proc]
+                for key, value in params.items():
+                    flag = flag and (value == my_params[key])
+                    if not flag: break
+                if not flag: break
+                if isinstance(input_data, pd.DataFrame) and isinstance(input_data_recv, pd.DataFrame):
+                    flag = flag and (input_data.equals(input_data_recv))
+                else:
+                    flag = flag and (input_data == input_data_recv)
+                if not flag: break
+        else:
+            to_send = {k: v for k, v in my_params.items() if k not in \
+                    {'flag', 'assert_consistency', 'input_data', 'comm', 'rank', 'comm_size'}}
+            comm.gather((to_send, input_data), root=0)
+        flag = comm.bcast(flag, root=0)
+        assert(flag)
+    
+    # main work
+    if rank == 0:
+        result = pynfam_fit_wrapper_root_recalculate(input_data, categories, override_setts_fit, override_setts_cat, return_df, clean_files, \
+                                         exes_dir, scratch_dir, backup_dir, backup_option, backup_max, start_from_backup, \
+                                         nr_parallel_calcs, nthreads_per_calc, rerun_mode, ignore_hfb_nonconv, hfb_only, use_ratinterp, \
+                                         comm, rank, check, result_filename, \
+                                         **kwargs)
+        printf('One run of pynfam_fit_wrapper finishes at', datetime.datetime.now())
+    else:
+        result = pynfam_fit_wrapper_nonroot(comm, 0)
+    return result

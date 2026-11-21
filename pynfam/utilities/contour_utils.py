@@ -63,7 +63,7 @@ class contourSetElem(object):
 
         bounds = (round(self.ctr.energy_min, -int(np.log10(id_tol))),
                   round(self.ctr.energy_max, -int(np.log10(id_tol))))
-
+        bounds = (self.ctr.energy_min, self.ctr.energy_max)
         if self.is_ft_pole:
             return contourSetElem.FT_pole_label
 

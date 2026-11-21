@@ -2,8 +2,8 @@
 #SBATCH -p pdebug 
 #SBATCH -J gsXXX
 #SBATCH -o out_%A.out
-#SBATCH -N 2
-#SBATCH --ntasks-per-node=56
+#SBATCH -N 3
+#SBATCH --ntasks-per-node=112
 #SBATCH --time=00-01:00:00   #format days-hh:mm:ss
 
 ulimit -s unlimited 
